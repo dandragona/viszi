@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "declaration": false,
+    "sourceMap": true,
+    "lib": ["ES2022"],
+    "types": ["node"]
+  },
+  "include": [
+    "src/cli/**/*",
+    "src/analyzer/**/*",
+    "src/ai/**/*",
+    "src/model/**/*",
+    "src/server/**/*",
+    "src/shared/**/*"
+  ],
+  "exclude": ["src/web/**/*", "node_modules", "dist"]
+}

@@ -1,9 +1,14 @@
 .DS_Store
 node_modules/
 .venv/
-bin/
-obj/
 *.log
+
+dist/
+.viszi/
+.vite/
+coverage/
+*.tsbuildinfo
+
 .obsidian/workspace.json
 .obsidian/workspace-mobile.json
 .obsidian/graph.json

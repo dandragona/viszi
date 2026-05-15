@@ -1,0 +1,63 @@
+{
+  "name": "viszi",
+  "version": "0.1.0",
+  "description": "AI-powered multi-tiered interactive system & flow diagrams for any codebase. Uses your local Claude Code CLI for inference.",
+  "license": "MIT",
+  "author": "Daniel Mandragona <danielmandragona@gmail.com>",
+  "type": "module",
+  "bin": {
+    "viszi": "./bin/viszi.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "grammars",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm run build:web && npm run build:cli",
+    "build:cli": "tsc -p tsconfig.cli.json",
+    "build:web": "vite build",
+    "dev:web": "vite",
+    "dev:cli": "tsc -p tsconfig.cli.json --watch",
+    "clean": "rm -rf dist .viszi *.tsbuildinfo",
+    "typecheck": "tsc -p tsconfig.cli.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "smoke": "node bin/viszi.js --help"
+  },
+  "dependencies": {
+    "@fastify/static": "^7.0.4",
+    "@fastify/websocket": "^10.0.1",
+    "commander": "^12.1.0",
+    "cosmiconfig": "^9.0.0",
+    "execa": "^9.5.1",
+    "fastify": "^4.28.1",
+    "get-port": "^7.1.0",
+    "globby": "^14.0.2",
+    "graphology": "^0.25.4",
+    "ignore": "^5.3.2",
+    "kleur": "^4.1.5",
+    "open": "^10.1.0",
+    "ora": "^8.1.1",
+    "web-tree-sitter": "^0.23.0",
+    "ws": "^8.20.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "elkjs": "^0.9.3",
+    "lucide-react": "^0.460.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0",
+    "reactflow": "^11.11.4",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  }
+}

@@ -1,0 +1,9 @@
+.DS_Store
+node_modules/
+.venv/
+bin/
+obj/
+*.log
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/graph.json

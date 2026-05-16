@@ -11,6 +11,7 @@ Analyse a codebase and serve interactive diagrams.
 | `[path]` | `.` | Path to the codebase to analyse |
 | `--levels <n>` | `2` | Tier depth (1–5). 1 = global only; 2 = global + per-component; 3+ = recursively deeper |
 | `--no-flows` | flows on | Skip flow-diagram generation |
+| `--root-scope <relpath>` | repo root | Treat `<relpath>` (under `[path]`) as the L1 root. Useful for `src/<one-package>/...` shaped repos where the L1 would otherwise collapse into a single giant component. viszi also auto-suggests this flag at the end of an L1 run when one component holds ≥ 75% of the LOC. |
 | `--output <dir>` | `<path>/.viszi` | Where to write the JSON output |
 | `--port <n>` | auto | HTTP server port |
 | `--no-open` | open | Don't auto-open the browser |

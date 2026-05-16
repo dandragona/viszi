@@ -96,6 +96,8 @@ function describe(p: ProgressEvent | null): string {
       return `${p.cached ? '↺ cache' : '✦ Claude'} ${p.kind} L${p.level} ${p.scope || '/'}`;
     case 'write':
       return `Writing ${p.diagrams} diagrams`;
+    case 'hint':
+      return p.message.split('\n')[0];
     case 'done':
       return 'Done';
   }

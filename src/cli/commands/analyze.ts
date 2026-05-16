@@ -1,4 +1,5 @@
 import { existsSync, statSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { runAnalysis, type ProgressEvent } from '../../ai/orchestrator.js';
 import { absolutize, defaultOutputDir } from '../../shared/paths.js';
 import { Logger, k } from '../logger.js';
@@ -11,6 +12,7 @@ export interface AnalyzeArgs {
   path?: string;
   levels: number;
   flows: boolean;
+  rootScope?: string;
   output?: string;
   port?: number;
   open: boolean;
@@ -39,6 +41,19 @@ export async function runAnalyzeCommand(args: AnalyzeArgs): Promise<number> {
     return 1;
   }
 
+  if (args.rootScope) {
+    const normalised = args.rootScope.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    const scopeAbs = resolve(repoRoot, normalised);
+    if (!scopeAbs.startsWith(repoRoot)) {
+      log.error(`--root-scope must be inside ${repoRoot} (got ${args.rootScope})`);
+      return 1;
+    }
+    if (!existsSync(scopeAbs) || !statSync(scopeAbs).isDirectory()) {
+      log.error(`--root-scope path does not exist or is not a directory: ${scopeAbs}`);
+      return 1;
+    }
+  }
+
   const outputDir = args.output ? absolutize(args.output, repoRoot) : defaultOutputDir(repoRoot);
   const cfg = await loadConfig(repoRoot);
 
@@ -63,6 +78,9 @@ export async function runAnalyzeCommand(args: AnalyzeArgs): Promise<number> {
         break;
       case 'write':
         log.update(`Writing ${e.diagrams} diagrams`);
+        break;
+      case 'hint':
+        log.info(k.yellow('Hint: ') + e.message);
         break;
       case 'done':
         break;
@@ -127,6 +145,7 @@ export async function runAnalyzeCommand(args: AnalyzeArgs): Promise<number> {
       outputDir,
       levels: args.levels,
       flowsEnabled: args.flows,
+      rootScope: args.rootScope,
       concurrency: args.concurrency,
       maxBudgetUsd: args.maxBudgetUsd,
       cache: args.cache,

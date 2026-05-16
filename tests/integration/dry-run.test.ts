@@ -52,6 +52,37 @@ describe('runAnalysis --dry-run', () => {
     expect(sysEntry).toBeDefined();
   });
 
+  it('respects --root-scope: only files under that scope appear in modules', async () => {
+    const scopedDir = mkdtempSync(join(tmpdir(), 'viszi-dryrun-scope-'));
+    try {
+      await runAnalysis({
+        repoRoot: FIXTURE,
+        outputDir: scopedDir,
+        levels: 1,
+        flowsEnabled: false,
+        rootScope: 'src',
+        concurrency: 1,
+        cache: false,
+        dryRun: true,
+      });
+      const index = JSON.parse(readFileSync(indexFile(scopedDir), 'utf8')) as {
+        diagrams: Array<{ id: string; kind: string }>;
+      };
+      const sysEntry = index.diagrams.find((d) => d.kind === 'system');
+      if (!sysEntry) throw new Error('expected a system diagram');
+      const diag = JSON.parse(
+        readFileSync(join(diagramsSubdir(scopedDir), `${sysEntry.id}.json`), 'utf8'),
+      ) as { nodes: Array<{ files: string[] }> };
+      for (const n of diag.nodes) {
+        for (const f of n.files) {
+          expect(f.startsWith('src/'), `${f} should be under src/`).toBe(true);
+        }
+      }
+    } finally {
+      rmSync(scopedDir, { recursive: true, force: true });
+    }
+  });
+
   it('the mock components response validates against ComponentsSchema-shaped data', async () => {
     // After the run, read one system diagram and confirm its (id, label, kind, description)
     // tuples match the component-shape constraints in the schema.

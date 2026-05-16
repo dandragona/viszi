@@ -40,6 +40,10 @@ program
   .argument('[path]', 'Path to the codebase to analyse', '.')
   .option('--levels <n>', 'Tier depth (1-5)', parseIntStrict('levels'), 2)
   .option('--no-flows', 'Skip flow diagram generation')
+  .option(
+    '--root-scope <relpath>',
+    'Treat <relpath> (under the analysed path) as the L1 root. Useful for single-package repos like `src/<pkg>/...`.',
+  )
   .option('--output <dir>', 'Output directory (default: <path>/.viszi)')
   .option('--port <n>', 'Server port (default: auto)', parseIntStrict('port'))
   .option('--no-open', "Don't auto-open the browser")
@@ -65,6 +69,7 @@ program
       path,
       levels: opts.levels as number,
       flows: opts.flows !== false,
+      rootScope: opts.rootScope as string | undefined,
       output: opts.output as string | undefined,
       port: opts.port as number | undefined,
       open: opts.open !== false,
@@ -160,6 +165,7 @@ program.addHelpText(
   `\nExamples:
   ${k.cyan('viszi .')}                     Analyse the current directory (levels=2)
   ${k.cyan('viszi ./monorepo --levels 3')}  Three tiers deep
+  ${k.cyan('viszi . --root-scope src/app')} Start the L1 diagram inside src/app/
   ${k.cyan('viszi . --no-flows')}           Skip flow diagrams
   ${k.cyan('viszi . --dry-run')}            Generate stub diagrams without calling Claude
   ${k.cyan('viszi serve .')}                Re-open an existing analysis

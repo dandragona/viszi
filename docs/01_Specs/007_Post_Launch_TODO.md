@@ -123,10 +123,10 @@ Hard numbers from the run described above:
 
 The cheapest, most composable fix is a new flag that lets the user push the analysis start point one directory deeper.
 
-- [ ] Add `--root-scope <relpath>` to the CLI. Example: `viszi . --root-scope src/app --levels 2` treats `src/app/` as the root. The L1 diagram would then have ~10 components (one per `src/app/<subpkg>/`) instead of 1.
-- [ ] Implement by passing the scope to `traverse` (existing `opts.scope`) and threading it through `runAnalysis` so paths in the diagram are reported relative to the new root.
-- [ ] **Heuristic auto-suggest (optional)**: at the end of an L1 run, if one component has ≥75% of the LOC, print `Hint: this repo has one dominant component. Re-run with --root-scope src/<X> for a more useful level 1.`
-- [ ] Document in `docs/01_Specs/002_CLI_Spec.md`.
+- [x] Add `--root-scope <relpath>` to the CLI. Example: `viszi . --root-scope src/app --levels 2` treats `src/app/` as the root. The L1 diagram would then have ~10 components (one per `src/app/<subpkg>/`) instead of 1.
+- [x] Implement by passing the scope to `traverse` (existing `opts.scope`) and threading it through `runAnalysis` so paths in the diagram are reported relative to the new root.
+- [x] **Heuristic auto-suggest**: at the end of an L1 run, if one component has ≥75% of the LOC, print `Hint: One L1 component (X) holds 80% of the LOC. For a more useful Level 1, re-run with --root-scope src/<X>.`
+- [x] Document in `docs/01_Specs/002_CLI_Spec.md`.
 
 ## 12. Don't drill into flow steps that have no underlying sub-structure
 

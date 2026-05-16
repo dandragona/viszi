@@ -37,6 +37,13 @@ export interface OrchestratorOpts {
   bare?: boolean;
   dryRun?: boolean;
   config?: VisziConfig;
+  /**
+   * Push the analysis start point one or more directories deeper. Useful for
+   * `src/<one-package>/...` shaped repos where the L1 root system would
+   * otherwise collapse into one giant component. Path is relative to repoRoot;
+   * a leading/trailing slash is tolerated. See TODO 007 #11.
+   */
+  rootScope?: string;
   onProgress?: (event: ProgressEvent) => void;
   /** Called whenever a diagram is added to the writer (live broadcast hook). */
   onDiagramAdded?: (diagram: AnyDiagram) => void;
@@ -57,6 +64,7 @@ export type ProgressEvent =
   | { phase: 'cluster'; moduleCount: number }
   | { phase: 'ai'; kind: 'components' | 'flows'; scope: string; level: number; cached: boolean; durationMs?: number }
   | { phase: 'write'; diagrams: number }
+  | { phase: 'hint'; message: string }
   | { phase: 'done'; rootSystemId: string };
 
 interface ClaudeComponentsResp {
@@ -97,7 +105,10 @@ export interface RunResult {
   estimatedCostUsd: number;
 }
 
-const ROOT_SCOPE = '';
+function normalizeRootScope(raw?: string): string {
+  if (!raw) return '';
+  return raw.replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '');
+}
 
 export async function runAnalysis(opts: OrchestratorOpts): Promise<RunResult> {
   const baseWriter = new DiagramWriter({
@@ -128,10 +139,16 @@ export async function runAnalysis(opts: OrchestratorOpts): Promise<RunResult> {
     if (!(await isClaudeAvailable())) throw new ClaudeUnavailableError();
   }
 
+  const rootScope = normalizeRootScope(opts.rootScope);
+
   // ─── Stage A: full-repo scan ────────────────────────────────────────────
-  progress({ phase: 'scan', message: 'Walking repository' });
+  progress({
+    phase: 'scan',
+    message: rootScope ? `Walking ${rootScope}/` : 'Walking repository',
+  });
   const allFiles = await traverse({
     root: opts.repoRoot,
+    scope: rootScope || undefined,
     extraExcludes: opts.config?.exclude,
     includeOnly: opts.config?.include,
   });
@@ -152,9 +169,9 @@ export async function runAnalysis(opts: OrchestratorOpts): Promise<RunResult> {
   const fullEntrypoints = detectEntrypoints({ repoRoot: opts.repoRoot, parsed });
 
   // ─── Stage B: recursive level loop ──────────────────────────────────────
-  const rootSystemId = systemDiagramId(ROOT_SCOPE);
+  const rootSystemId = systemDiagramId(rootScope);
   await analyzeSystemTier({
-    scope: ROOT_SCOPE,
+    scope: rootScope,
     level: 1,
     parentId: undefined,
     parentLabel: undefined,
@@ -166,11 +183,18 @@ export async function runAnalysis(opts: OrchestratorOpts): Promise<RunResult> {
     progress,
   });
 
+  {
+    const rootSystem = writer.get(rootSystemId);
+    if (rootSystem && rootSystem.kind === 'system') {
+      maybeSuggestRootScope(rootSystem, opts, rootScope, progress);
+    }
+  }
+
   if (opts.flowsEnabled) {
     const rootSystem = writer.get(rootSystemId);
     if (rootSystem && rootSystem.kind === 'system') {
       await analyzeFlowsTier({
-        scope: ROOT_SCOPE,
+        scope: rootScope,
         level: 1,
         parentId: undefined,
         parentFlowName: undefined,
@@ -456,6 +480,41 @@ function uniqueFiles(files: string[]): string[] {
 
 function baseDirName(p: string): string {
   return p.split(/[/\\]/).filter(Boolean).pop() ?? 'codebase';
+}
+
+/**
+ * Suggest `--root-scope <X>` to the user when the L1 diagram is dominated by
+ * a single component (≥75% of LOC). Common for `src/<one-package>/...` repos.
+ * #11 in 007_Post_Launch_TODO.
+ */
+function maybeSuggestRootScope(
+  rootSystem: SystemDiagram,
+  opts: OrchestratorOpts,
+  currentScope: string,
+  progress: (e: ProgressEvent) => void,
+): void {
+  if (currentScope) return; // user already supplied a root scope
+  if (rootSystem.nodes.length < 2) return;
+  const totalLoc = rootSystem.nodes.reduce((acc, n) => acc + ((n.meta?.loc as number | undefined) ?? 0), 0);
+  if (totalLoc <= 0) return;
+  const dominant = [...rootSystem.nodes].sort(
+    (a, b) => ((b.meta?.loc as number | undefined) ?? 0) - ((a.meta?.loc as number | undefined) ?? 0),
+  )[0];
+  const dominantLoc = (dominant.meta?.loc as number | undefined) ?? 0;
+  if (dominantLoc / totalLoc < 0.75) return;
+  // Pick a likely scope by looking at the dominant component's files.
+  const sample = dominant.files[0]?.replace(/\\/g, '/');
+  if (!sample) return;
+  const parts = sample.split('/').filter(Boolean);
+  if (parts.length < 2) return;
+  const suggestedScope = parts.slice(0, 2).join('/');
+  progress({
+    phase: 'hint',
+    message:
+      `One L1 component (${dominant.label}) holds ${Math.round((dominantLoc / totalLoc) * 100)}% of the LOC.\n` +
+      `      For a more useful Level 1, re-run with ${'`'}--root-scope ${suggestedScope}${'`'}.`,
+  });
+  void opts;
 }
 
 function systemDiagramId(scope: string, suffix?: string): string {

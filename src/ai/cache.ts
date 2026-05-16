@@ -22,10 +22,15 @@ export class AiCache {
     return createHash('sha256').update(JSON.stringify(payload)).digest('hex').slice(0, 24);
   }
 
-  private file(key: CacheKey): string {
+  /** The filename (no directory) used for a cache key. */
+  static filenameFor(key: CacheKey): string {
     const k = `${key.promptName}__${key.scope || 'root'}__L${key.level}__${SCHEMA_VERSION}__${key.contentHash}`;
     const safe = k.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 220);
-    return resolve(this.dir, `${safe}.json`);
+    return `${safe}.json`;
+  }
+
+  private file(key: CacheKey): string {
+    return resolve(this.dir, AiCache.filenameFor(key));
   }
 
   get<T>(key: CacheKey): T | undefined {

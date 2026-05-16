@@ -377,10 +377,34 @@ button.primary:hover {
     var(--bg-0);
 }
 
-.filter-pill {
+.regen-button {
   position: absolute;
   top: 14px;
   right: 14px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(17,24,39,0.85);
+  border: 1px solid var(--border);
+  color: var(--fg-2);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.regen-button:hover {
+  color: var(--fg-0);
+  border-color: var(--border-strong);
+  background: rgba(17,24,39,0.95);
+}
+
+.filter-pill {
+  position: absolute;
+  top: 14px;
+  right: 132px;
   z-index: 5;
   display: inline-flex;
   align-items: center;

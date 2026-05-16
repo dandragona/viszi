@@ -177,9 +177,10 @@ The cheapest, most composable fix is a new flag that lets the user push the anal
 
 **Gap:** to iterate on the prompt for one diagram, users have to `viszi clear` and re-run *everything*. There's no way to invalidate one cache key.
 
-- [ ] Add `viszi regen <diagram-id>` CLI subcommand: invalidate the matching cache key + re-run *just* that one AI call + rewrite that diagram's file + republish on the bus (so the open UI updates live).
-- [ ] In the UI, add a "regenerate this diagram" button in the top-right of every diagram view (gated to non-static mode).
-- [ ] Crucial for prompt-tuning work on items 10, 13.
+- [x] Added `viszi regen <diagram-id> [path]` (`src/cli/commands/regen.ts` + registered in `src/cli/index.ts`). Reads the diagram's stamped `meta.regenCacheKey`, deletes that single `.viszi/cache/<file>.json`, then re-runs the analyser. Because every other cache entry stays warm, only the one targeted Claude call actually fires.
+- [x] Diagrams now carry `meta.regenCacheKey` at write time (`buildSystemDiagram` + per-flow `buildFlowDiagram`), backed by a new public `AiCache.filenameFor()` so the filename is computed in exactly one place.
+- [x] Added a `Regenerate` button in the top-right of every diagram view (gated to non-static mode via `window.__VISZI_DATA__`). Clicking copies the matching `viszi regen <id>` command to the clipboard (with a `window.prompt` fallback for non-secure contexts). The in-process bus-driven live re-run is captured as a follow-up — the clipboard form covers the prompt-tuning use case without extra server surface.
+- [x] Crucial for prompt-tuning work on items 10, 13. Documented in `docs/01_Specs/002_CLI_Spec.md`.
 
 ## 18. Per-diagram filter / hide nodes
 

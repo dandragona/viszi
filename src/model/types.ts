@@ -50,6 +50,8 @@ export interface SystemDiagram {
   description?: string;
   nodes: DiagramNode[];
   edges: DiagramEdge[];
+  /** Diagram-level metadata. Currently only `regenCacheKey` for `viszi regen`. */
+  meta?: { regenCacheKey?: string };
 }
 
 export interface FlowStep {
@@ -72,6 +74,8 @@ export interface FlowDiagram {
   steps: FlowStep[];
   nodes: DiagramNode[];
   edges: DiagramEdge[];
+  /** Diagram-level metadata. Currently only `regenCacheKey` for `viszi regen`. */
+  meta?: { regenCacheKey?: string };
 }
 
 export type AnyDiagram = SystemDiagram | FlowDiagram;

@@ -78,6 +78,21 @@ describe('AiCache', () => {
     expect(SCHEMA_VERSION.length).toBeGreaterThan(0);
   });
 
+  it('exposes a stable filenameFor() — used by `viszi regen` to invalidate single entries', () => {
+    const key = {
+      promptName: 'components',
+      scope: 'src/foo',
+      level: 2,
+      contentHash: 'deadbeef',
+    };
+    const a = AiCache.filenameFor(key);
+    const b = AiCache.filenameFor(key);
+    expect(a).toBe(b);
+    expect(a).toMatch(/^components__src_foo__L2__.*__deadbeef\.json$/);
+    expect(a).toMatch(/\.json$/);
+    expect(a).not.toMatch(/[/\\]/); // it's just a filename, no path separators
+  });
+
   it('survives malformed cache files by returning undefined', () => {
     const cache = new AiCache(tmp, true);
     const key = {

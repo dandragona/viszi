@@ -100,6 +100,7 @@ export function DiagramCanvas({ diagram }: { diagram: AnyDiagram }) {
   return (
     <div className="canvas-wrap">
       <DiagramMeta diagram={diagram} />
+      <RegenButton diagram={diagram} />
       {hidden.size > 0 && (
         <div className="filter-pill">
           <span>{hidden.size} hidden</span>
@@ -158,6 +159,34 @@ function DiagramMeta({ diagram }: { diagram: AnyDiagram }) {
       </div>
       {diagram.description && <div className="desc">{diagram.description}</div>}
     </div>
+  );
+}
+
+function RegenButton({ diagram }: { diagram: AnyDiagram }) {
+  // Static-mode bundles (`viszi export`) have no live cache to invalidate.
+  if (typeof window !== 'undefined' && window.__VISZI_DATA__) return null;
+  if (!diagram.meta?.regenCacheKey) return null;
+  const [copied, setCopied] = useState(false);
+  const cmd = `viszi regen ${diagram.id}`;
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(cmd);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Older browsers / non-secure contexts — surface the command so the user can copy manually.
+      window.prompt('Copy this command:', cmd);
+    }
+  };
+  return (
+    <button
+      type="button"
+      className="regen-button"
+      onClick={copy}
+      title={`Copy '${cmd}' — invalidates this diagram's cache entry and re-runs it.`}
+    >
+      <Icon name="zap" size={11} /> {copied ? 'Copied!' : 'Regenerate'}
+    </button>
   );
 }
 

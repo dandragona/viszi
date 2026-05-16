@@ -5,6 +5,7 @@ import { runServeCommand } from './commands/serve.js';
 import { runClearCommand } from './commands/clear.js';
 import { runExportCommand } from './commands/export.js';
 import { runInitCommand } from './commands/init.js';
+import { runRegenCommand } from './commands/regen.js';
 import { viszVersion } from '../shared/version.js';
 import { k } from './logger.js';
 
@@ -176,6 +177,25 @@ program
     process.exit(code);
   });
 
+program
+  .command('regen')
+  .description('Invalidate one diagram\'s cache entry + re-run only that AI call (existing cache makes the rest free)')
+  .argument('<diagram-id>', 'Id of the diagram to regenerate (see `id` in any diagram JSON or the URL)')
+  .argument('[path]', 'Repo path (default: cwd)', '.')
+  .option('--output <dir>', 'Output directory (default: <path>/.viszi)')
+  .option('-v, --verbose', 'Verbose logging')
+  .option('-q, --quiet', 'Errors only')
+  .action(async (diagramId: string, path: string, opts: Record<string, unknown>) => {
+    const code = await runRegenCommand({
+      diagramId,
+      path,
+      output: opts.output as string | undefined,
+      verbose: !!opts.verbose,
+      quiet: !!opts.quiet,
+    });
+    process.exit(code);
+  });
+
 program.addHelpText(
   'after',
   `\nExamples:
@@ -185,6 +205,7 @@ program.addHelpText(
   ${k.cyan('viszi . --no-flows')}           Skip flow diagrams
   ${k.cyan('viszi . --dry-run')}            Generate stub diagrams without calling Claude
   ${k.cyan('viszi serve .')}                Re-open an existing analysis
+  ${k.cyan('viszi regen sys__src_auth__L2 .')} Re-run one AI call (cache makes the rest free)
   ${k.cyan('viszi init .')}                 Write a starter .viszi.json with every field documented
 `,
 );

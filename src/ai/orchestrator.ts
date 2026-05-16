@@ -407,6 +407,7 @@ async function analyzeSystemTier(args: SystemTierArgs): Promise<SystemDiagram | 
     idOverride: args.idOverride,
     titleOverride: args.titleOverride,
   });
+  diagram.meta = { ...diagram.meta, regenCacheKey: AiCache.filenameFor(cacheKey) };
   writer.add(diagram);
   args.onSystemAdded?.(diagram);
 
@@ -710,6 +711,7 @@ async function analyzeFlowsTier(args: FlowTierArgs): Promise<void> {
       idOverride,
       titleOverride,
     });
+    flow.meta = { ...flow.meta, regenCacheKey: AiCache.filenameFor(cacheKey) };
     writer.add(flow);
 
     // Recurse: drill into each step that maps to a component which itself has

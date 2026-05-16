@@ -40,6 +40,20 @@ Re-open an existing analysis without regenerating.
 
 Remove the `.viszi/` directory (caches and diagrams).
 
+### `viszi regen <diagram-id> [path]`
+
+Invalidate one diagram's on-disk cache entry and re-run only that AI call. Every diagram now stores its cache key in `meta.regenCacheKey`; `regen` reads it, deletes the matching `.viszi/cache/<file>.json`, then re-invokes the analyser. Because the cache stays warm for every *other* diagram, only the one targeted call actually hits Claude.
+
+| Flag | Default | Description |
+|---|---|---|
+| `<diagram-id>` | (required) | Id of the diagram to regenerate. Visible in the URL (`/d/<id>`) and as `id` inside any diagram JSON. |
+| `[path]` | `.` | Repo whose `.viszi/` holds the analysis |
+| `--output <dir>` | `<path>/.viszi` | Output directory |
+| `-v, --verbose` | off | Verbose logging |
+| `-q, --quiet` | off | Errors only |
+
+Each diagram view in the UI also has a `Regenerate` button (top-right) that copies the matching `viszi regen <id>` command to the clipboard — convenient for prompt-tuning loops.
+
 ### `viszi export [path]`
 
 Bundle an existing analysis into a single self-contained `.html` file.

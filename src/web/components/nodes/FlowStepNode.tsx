@@ -1,4 +1,4 @@
-import { Handle, Position } from 'reactflow';
+import { Handle, Position, useNodeId } from 'reactflow';
 import { styleForKind } from '../../theme';
 import { Icon } from '../Icon';
 import type { ComponentKind } from '../../../model/types.js';
@@ -11,9 +11,11 @@ export interface FlowStepNodeData {
   componentLabel?: string;
   subDiagramId?: string;
   onDrill?: (id: string) => void;
+  onHide?: (id: string) => void;
 }
 
 export function FlowStepNode({ data }: { data: FlowStepNodeData }) {
+  const nodeId = useNodeId();
   const style = styleForKind(data.kind);
   const clickable = !!data.subDiagramId;
   const cssVars = {
@@ -27,6 +29,10 @@ export function FlowStepNode({ data }: { data: FlowStepNodeData }) {
     e.stopPropagation();
     data.onDrill?.(data.subDiagramId);
   };
+  const onHide = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (nodeId && data.onHide) data.onHide(nodeId);
+  };
   return (
     <div
       className={`viszi-node flow-step ${clickable ? 'clickable' : ''}`}
@@ -35,6 +41,17 @@ export function FlowStepNode({ data }: { data: FlowStepNodeData }) {
       title={clickable ? 'Click to drill into sub-flow' : undefined}
     >
       <Handle type="target" position={Position.Left} />
+      {data.onHide && nodeId && (
+        <button
+          type="button"
+          className="node-hide"
+          onClick={onHide}
+          title="Hide this node"
+          aria-label="Hide this node"
+        >
+          ×
+        </button>
+      )}
       {clickable && (
         <span className="drill-corner" aria-hidden="true">
           <Icon name="arrow-up-right" size={11} />

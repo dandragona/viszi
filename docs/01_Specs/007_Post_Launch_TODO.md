@@ -185,10 +185,10 @@ The cheapest, most composable fix is a new flag that lets the user push the anal
 
 **Gap:** on a 12-node L2 diagram, users often want to focus on 3. No way to hide the others.
 
-- [ ] Multi-select hide (Shift-click? checkbox in a context menu?) on `ComponentNode`.
-- [ ] Persist hidden ids to the URL hash (`?hide=cli,test-suite`) so the view is sharable.
-- [ ] "Reset filter" button in the topbar.
-- [ ] Stateless — no backend changes.
+- [x] Hide-on-click affordance: every `ComponentNode` and `FlowStepNode` shows a small `×` button in the top-left on hover. Clicking it adds the node id to the hidden set.
+- [x] Persisted to the URL hash (`#hide=id1,id2`) via `URLSearchParams` so the view is share-able and survives reload. `DiagramCanvas` reads the set on every render and re-filters nodes + edges accordingly.
+- [x] "N hidden · Reset" pill renders in the top-right of the canvas when any node is hidden; clicking Reset clears the `hide` hash param (preserves any other hash params like `focus`).
+- [x] Stateless — no backend changes. Edges whose source or target is hidden are filtered out client-side so the layout doesn't leave dangling arrows.
 
 ---
 

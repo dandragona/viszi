@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import ReactFlow, {
   Background,
   BackgroundVariant,
@@ -15,6 +15,25 @@ import { FlowStepNode, type FlowStepNodeData } from './nodes/FlowStepNode';
 import { layoutWithElk } from '../layout/elk';
 import { Icon } from './Icon';
 import { TRIGGER_ICON } from '../theme';
+
+function parseHideHash(hash: string): Set<string> {
+  if (!hash || hash.length < 2) return new Set();
+  const params = new URLSearchParams(hash.slice(1));
+  const raw = params.get('hide');
+  if (!raw) return new Set();
+  return new Set(raw.split(',').map((s) => s.trim()).filter(Boolean));
+}
+
+function writeHideHash(currentHash: string, hidden: Set<string>): string {
+  const params = new URLSearchParams(currentHash.length > 1 ? currentHash.slice(1) : '');
+  if (hidden.size === 0) {
+    params.delete('hide');
+  } else {
+    params.set('hide', Array.from(hidden).join(','));
+  }
+  const out = params.toString();
+  return out ? `#${out}` : '';
+}
 
 const EDGE_STYLES: Record<EdgeKind, { stroke: string; strokeWidth: number; dasharray?: string }> = {
   imports: { stroke: 'rgba(148,163,184,0.55)', strokeWidth: 1.5 },
@@ -34,14 +53,33 @@ type NodeData = ComponentNodeData | FlowStepNodeData;
 
 export function DiagramCanvas({ diagram }: { diagram: AnyDiagram }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [layouted, setLayouted] = useState<Node<NodeData>[] | null>(null);
+
+  const hidden = useMemo(() => parseHideHash(location.hash), [location.hash]);
 
   const onDrill = useCallback(
     (id: string) => navigate(`/d/${encodeURIComponent(id)}`),
     [navigate],
   );
 
-  const { initialNodes, edges } = useMemo(() => buildFlowElements(diagram, onDrill), [diagram, onDrill]);
+  const onHide = useCallback(
+    (id: string) => {
+      const next = new Set(parseHideHash(location.hash));
+      next.add(id);
+      navigate(`${location.pathname}${location.search}${writeHideHash(location.hash, next)}`, { replace: true });
+    },
+    [location.hash, location.pathname, location.search, navigate],
+  );
+
+  const resetHidden = useCallback(() => {
+    navigate(`${location.pathname}${location.search}${writeHideHash(location.hash, new Set())}`, { replace: true });
+  }, [location.hash, location.pathname, location.search, navigate]);
+
+  const { initialNodes, edges } = useMemo(
+    () => buildFlowElements(diagram, onDrill, onHide, hidden),
+    [diagram, onDrill, onHide, hidden],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -62,6 +100,12 @@ export function DiagramCanvas({ diagram }: { diagram: AnyDiagram }) {
   return (
     <div className="canvas-wrap">
       <DiagramMeta diagram={diagram} />
+      {hidden.size > 0 && (
+        <div className="filter-pill">
+          <span>{hidden.size} hidden</span>
+          <button type="button" onClick={resetHidden}>Reset</button>
+        </div>
+      )}
       {!layouted ? (
         <div className="loading"><span className="spinner" /> Laying out…</div>
       ) : (
@@ -117,66 +161,81 @@ function DiagramMeta({ diagram }: { diagram: AnyDiagram }) {
   );
 }
 
-function buildFlowElements(diagram: AnyDiagram, onDrill: (id: string) => void): {
+function buildFlowElements(
+  diagram: AnyDiagram,
+  onDrill: (id: string) => void,
+  onHide: (id: string) => void,
+  hidden: Set<string>,
+): {
   initialNodes: Node<NodeData>[];
   edges: Edge[];
 } {
   if (diagram.kind === 'system') {
-    const initialNodes: Node<NodeData>[] = diagram.nodes.map((n) => ({
-      id: n.id,
-      type: 'component',
-      data: {
-        label: n.label,
-        kind: n.kind,
-        description: n.description,
-        files: n.files,
-        subDiagramId: n.subDiagramId,
-        onDrill,
-      } satisfies ComponentNodeData,
-      position: { x: 0, y: 0 },
-    }));
-    const edges: Edge[] = diagram.edges.map((e) => {
-      const s = EDGE_STYLES[e.kind] ?? EDGE_STYLES.imports;
-      return {
-        id: e.id,
-        source: e.source,
-        target: e.target,
-        label: e.label ?? (e.kind === 'imports' ? undefined : e.kind),
-        type: 'smoothstep',
-        animated: e.kind === 'calls' || e.kind === 'emits',
-        style: {
-          stroke: s.stroke,
-          strokeWidth: s.strokeWidth,
-          ...(s.dasharray ? { strokeDasharray: s.dasharray } : {}),
-        },
-        labelStyle: { fill: s.stroke, fontSize: 10, fontWeight: 500 },
-        labelBgStyle: { fill: 'rgba(11,15,23,0.85)', fillOpacity: 0.85 },
-      } as Edge;
-    });
+    const initialNodes: Node<NodeData>[] = diagram.nodes
+      .filter((n) => !hidden.has(n.id))
+      .map((n) => ({
+        id: n.id,
+        type: 'component',
+        data: {
+          label: n.label,
+          kind: n.kind,
+          description: n.description,
+          files: n.files,
+          subDiagramId: n.subDiagramId,
+          onDrill,
+          onHide,
+        } satisfies ComponentNodeData,
+        position: { x: 0, y: 0 },
+      }));
+    const edges: Edge[] = diagram.edges
+      .filter((e) => !hidden.has(e.source) && !hidden.has(e.target))
+      .map((e) => {
+        const s = EDGE_STYLES[e.kind] ?? EDGE_STYLES.imports;
+        return {
+          id: e.id,
+          source: e.source,
+          target: e.target,
+          label: e.label ?? (e.kind === 'imports' ? undefined : e.kind),
+          type: 'smoothstep',
+          animated: e.kind === 'calls' || e.kind === 'emits',
+          style: {
+            stroke: s.stroke,
+            strokeWidth: s.strokeWidth,
+            ...(s.dasharray ? { strokeDasharray: s.dasharray } : {}),
+          },
+          labelStyle: { fill: s.stroke, fontSize: 10, fontWeight: 500 },
+          labelBgStyle: { fill: 'rgba(11,15,23,0.85)', fillOpacity: 0.85 },
+        } as Edge;
+      });
     return { initialNodes, edges };
   }
 
   // Flow diagram
-  const initialNodes: Node<NodeData>[] = diagram.nodes.map((n) => ({
-    id: n.id,
-    type: 'flowStep',
-    data: {
-      order: (n.meta?.order as number) ?? 0,
-      label: n.label,
-      kind: n.kind,
-      description: n.description,
-      componentLabel: n.meta?.componentLabel as string | undefined,
-      subDiagramId: n.subDiagramId ?? findSubFlowForStep(diagram, n.id),
-      onDrill,
-    } satisfies FlowStepNodeData,
-    position: { x: 0, y: 0 },
-  }));
-  const edges: Edge[] = diagram.edges.map((e) => ({
-    id: e.id,
-    source: e.source,
-    target: e.target,
-    type: 'smoothstep',
-  }));
+  const initialNodes: Node<NodeData>[] = diagram.nodes
+    .filter((n) => !hidden.has(n.id))
+    .map((n) => ({
+      id: n.id,
+      type: 'flowStep',
+      data: {
+        order: (n.meta?.order as number) ?? 0,
+        label: n.label,
+        kind: n.kind,
+        description: n.description,
+        componentLabel: n.meta?.componentLabel as string | undefined,
+        subDiagramId: n.subDiagramId ?? findSubFlowForStep(diagram, n.id),
+        onDrill,
+        onHide,
+      } satisfies FlowStepNodeData,
+      position: { x: 0, y: 0 },
+    }));
+  const edges: Edge[] = diagram.edges
+    .filter((e) => !hidden.has(e.source) && !hidden.has(e.target))
+    .map((e) => ({
+      id: e.id,
+      source: e.source,
+      target: e.target,
+      type: 'smoothstep',
+    }));
   return { initialNodes, edges };
 }
 

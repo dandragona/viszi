@@ -1,4 +1,4 @@
-import { Handle, Position } from 'reactflow';
+import { Handle, Position, useNodeId } from 'reactflow';
 import { styleForKind } from '../../theme';
 import { Icon } from '../Icon';
 import type { ComponentKind } from '../../../model/types.js';
@@ -10,9 +10,11 @@ export interface ComponentNodeData {
   files?: string[];
   subDiagramId?: string;
   onDrill?: (id: string) => void;
+  onHide?: (id: string) => void;
 }
 
 export function ComponentNode({ data }: { data: ComponentNodeData }) {
+  const nodeId = useNodeId();
   const style = styleForKind(data.kind);
   const clickable = !!data.subDiagramId;
   const cssVars = {
@@ -29,6 +31,11 @@ export function ComponentNode({ data }: { data: ComponentNodeData }) {
     data.onDrill?.(data.subDiagramId);
   };
 
+  const onHide = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (nodeId && data.onHide) data.onHide(nodeId);
+  };
+
   return (
     <div
       className={`viszi-node ${clickable ? 'clickable' : ''}`}
@@ -37,6 +44,17 @@ export function ComponentNode({ data }: { data: ComponentNodeData }) {
       title={clickable ? 'Click to drill into sub-diagram' : undefined}
     >
       <Handle type="target" position={Position.Left} />
+      {data.onHide && nodeId && (
+        <button
+          type="button"
+          className="node-hide"
+          onClick={onHide}
+          title="Hide this node"
+          aria-label="Hide this node"
+        >
+          ×
+        </button>
+      )}
       {clickable && (
         <span className="drill-corner" aria-hidden="true">
           <Icon name="arrow-up-right" size={11} />

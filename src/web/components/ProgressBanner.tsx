@@ -68,16 +68,30 @@ export function ProgressBanner({ onComplete }: { onComplete: () => void }) {
   if (!state || state.state === 'done' || state.state === 'idle') return null;
 
   const label = describe(latest);
-  const stat =
-    state.diagrams.length > 0
-      ? `${state.diagrams.length} diagrams · ${state.aiCallCount} AI calls`
+  const callsText =
+    typeof state.aiCallTotal === 'number' && state.aiCallTotal > 0
+      ? `${state.aiCallCount}/${state.aiCallTotal} AI calls`
       : `${state.aiCallCount} AI calls`;
+  const cacheSplit =
+    state.cacheHits > 0 || state.cacheMisses > 0
+      ? `${state.cacheHits} cached · ${state.cacheMisses} fresh`
+      : null;
+  const costNow =
+    state.costSoFar > 0
+      ? state.estimatedCostUsd > state.costSoFar
+        ? `$${state.costSoFar.toFixed(2)} spent · ~$${state.estimatedCostUsd.toFixed(2)} total`
+        : `$${state.costSoFar.toFixed(2)} spent`
+      : state.estimatedCostUsd > 0
+        ? `~$${state.estimatedCostUsd.toFixed(2)} estimated`
+        : null;
 
   return (
     <div className="progress-banner">
       <span className="spinner" />
       <span className="label">{label}</span>
-      <span className="stat">{stat}</span>
+      <span className="stat">{state.diagrams.length > 0 ? `${state.diagrams.length} diagrams · ${callsText}` : callsText}</span>
+      {cacheSplit && <span className="stat">·  {cacheSplit}</span>}
+      {costNow && <span className="stat">·  {costNow}</span>}
       {phase !== 'live' && <span className="stat">·  {phase}</span>}
     </div>
   );
@@ -92,6 +106,8 @@ function describe(p: ProgressEvent | null): string {
       return `Parsing files… ${p.processed}/${p.total}`;
     case 'cluster':
       return `Clustered into ${p.moduleCount} modules`;
+    case 'plan':
+      return `Plan: ~${p.aiCallTotal} AI calls, est. ≤ $${p.estimatedCostUsd.toFixed(2)}`;
     case 'ai':
       return `${p.cached ? '↺ cache' : '✦ Claude'} ${p.kind} L${p.level} ${p.scope || '/'}`;
     case 'write':

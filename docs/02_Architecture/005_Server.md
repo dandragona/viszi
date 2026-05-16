@@ -40,3 +40,22 @@
 ## Resource lifetime
 
 The server stays alive until the user hits Ctrl-C; the analyze command's promise blocks indefinitely after a successful start. A future `--watch` mode will re-run the analyzer in-process on file changes.
+
+## Live progress (`src/server/eventBus.ts`)
+
+The analyze command publishes `ProgressEvent`s onto a singleton `EventBus`. The bus maintains a current `BusState` and broadcasts both `progress` deltas and `state` snapshots over the `/ws/progress` WebSocket so newly-connected clients can be brought up to date.
+
+`BusState` fields (rough order of usefulness to the UI):
+
+| Field | Source | Notes |
+|---|---|---|
+| `state` | `start()` / `done()` / `error()` | `idle` / `running` / `done` / `error`. |
+| `diagrams` | `diagramAdded` events | List of `{id, kind, level, title, parentId}`. |
+| `aiCallCount` | `ai` progress events | Calls completed so far (cache hits + fresh). |
+| `aiCallTotal` | `plan` event + refined after L1 | Upper bound estimate. Powers the `[done/total]` bar. |
+| `costSoFar` | `ai.cumulativeCostUsd` | Sum of `total_cost_usd` from claude responses. |
+| `estimatedCostUsd` | `plan` event | Upper bound: `aiCallTotal × COST_PER_CALL_PRIOR_USD`. |
+| `cacheHits` / `cacheMisses` | `ai` events | Split of cached vs fresh calls. |
+| `lastProgress` | most recent event | Lets clients pick up mid-run. |
+
+The bus is purely a fan-out — it never reads back from the WebSocket. Subscribers attach via `bus.subscribe(handler)`.

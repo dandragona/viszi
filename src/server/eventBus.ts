@@ -25,7 +25,15 @@ export interface BusState {
   errorMessage?: string;
   diagrams: DiagramAddedEvent[];
   aiCallCount: number;
+  /** Pre-flight upper bound on total Claude calls (#14). Refines once after L1 completes. */
+  aiCallTotal?: number;
   estimatedCostUsd: number;
+  /** Running cost in USD, summed across all completed Claude calls (#3). */
+  costSoFar: number;
+  /** Number of cached AI responses reused so far. */
+  cacheHits: number;
+  /** Number of fresh Claude calls so far. */
+  cacheMisses: number;
   rootSystemId?: string;
 }
 
@@ -47,6 +55,9 @@ export class EventBus extends EventEmitter {
     diagrams: [],
     aiCallCount: 0,
     estimatedCostUsd: 0,
+    costSoFar: 0,
+    cacheHits: 0,
+    cacheMisses: 0,
   };
 
   start(): void {
@@ -56,12 +67,26 @@ export class EventBus extends EventEmitter {
       diagrams: [],
       aiCallCount: 0,
       estimatedCostUsd: 0,
+      costSoFar: 0,
+      cacheHits: 0,
+      cacheMisses: 0,
     };
     this.emitMessage({ type: 'state', state: this.state });
   }
 
   publishProgress(e: ProgressEvent): void {
     this.state.lastProgress = e;
+    if (e.phase === 'plan') {
+      this.state.aiCallTotal = e.aiCallTotal;
+      this.state.estimatedCostUsd = e.estimatedCostUsd;
+    }
+    if (e.phase === 'ai') {
+      if (typeof e.aiCallIndex === 'number') this.state.aiCallCount = e.aiCallIndex;
+      if (typeof e.cumulativeCostUsd === 'number') this.state.costSoFar = e.cumulativeCostUsd;
+      if (typeof e.aiCallTotal === 'number') this.state.aiCallTotal = e.aiCallTotal;
+      if (e.cached) this.state.cacheHits += 1;
+      else this.state.cacheMisses += 1;
+    }
     this.emitMessage({ type: 'progress', progress: e });
   }
 

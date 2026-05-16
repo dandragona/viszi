@@ -44,12 +44,12 @@ Hard numbers from the run described above:
 
 **Gap:** the existing `ProgressBanner` shows the latest event (`✦ Claude components L2 src/auth`) and a `N diagrams · M AI calls` counter. With 26+ AI calls at level 2, users don't know how far in they are or how much longer it'll take.
 
-- [ ] After the level-1 root system call completes, the orchestrator knows the level-1 component count and the depth target — derive an upper bound on total AI calls (system: `1 + N + N·M + …`; flows: capped by the 3-steps-per-flow rule).
-- [ ] Publish a `progress.total` field on the bus's `ProgressEvent`s; have `ProgressBanner` render a real `[done / total]` bar.
-- [ ] Show rolling average call duration + an ETA (`~Xs remaining`). Use a 5-call moving window so a slow call doesn't blow up the estimate.
-- [ ] Surface the cache-hit/miss split (`12 cached · 14 fresh`) so users see when subsequent runs go fast.
-- [ ] **Surface running cost.** Each `callClaude` result already carries `total_cost_usd`; sum it on the bus as `costSoFar`. Render as `$3.42 spent · ~$5 to go` next to the call counter. The $9 cold run was a surprise — a live cost meter would have let the user bail earlier. Pairs naturally with item 14 (pre-flight cost preview).
-- [ ] Extend `BusState` / `BusMessage` (`src/server/eventBus.ts`) to include `aiCallCount`, `aiCallTotal`, `costSoFar`, `cacheHits`, `cacheMisses`. Today the front-end has to recompute these from the diagram stream.
+- [x] After the level-1 root system call completes, the orchestrator knows the level-1 component count and the depth target — derive an upper bound on total AI calls (system: `1 + N + N·M + …`; flows: capped by the 3-steps-per-flow rule). (`estimateAiCalls` in `src/ai/orchestrator.ts`; refined after L1 completes.)
+- [x] Publish a `plan` ProgressEvent + thread `aiCallIndex`/`aiCallTotal` into every `ai` event; ProgressBanner renders `[done / total]`.
+- [x] Show rolling average call duration + an ETA (`~Xs remaining`) using a 5-call moving window (CLI; sticks to live spinner text).
+- [x] Surface the cache-hit/miss split (`12 cached · 14 fresh`) — wired in BusState + rendered by ProgressBanner.
+- [x] **Surface running cost.** `callClaude.costUsd` is summed into `writer.costUsd`; each `ai` event reports `cumulativeCostUsd`; BusState exposes `costSoFar`; banner renders `$X spent · ~$Y total`.
+- [x] Extended `BusState` (`src/server/eventBus.ts`) with `aiCallTotal`, `costSoFar`, `cacheHits`, `cacheMisses` (alongside existing `aiCallCount`, `estimatedCostUsd`).
 
 ## 4. Confirm/extend AI-call parallelism
 
@@ -150,10 +150,11 @@ The cheapest, most composable fix is a new flag that lets the user push the anal
 
 **Gap:** users discover real cost only after the run. The reference repo's $9 came as a surprise; a competent estimate before the first `claude` call would let users abort or tune `--levels`.
 
-- [ ] After the deterministic scan + module clustering (no AI yet), compute an upper bound on AI call count given `--levels`, the L1 component count guess (from cluster count), and the flow-drill cap.
-- [ ] Multiply by a per-call cost prior (~$0.30/call cold, drops fast with prompt cache).
-- [ ] Print before the first call: `Plan: ~26 AI calls, estimated ≤ $7.80 (≤ $0.50/call cap if set). Continue? [y/N]` (skip the prompt under `--yes` or `--no-confirm`).
-- [ ] Once the L1 root system completes, *refine* the estimate using the real L1 component count and broadcast it on the bus so the progress bar (item 3) gets accurate totals.
+- [x] After the deterministic scan + module clustering (no AI yet), compute an upper bound on AI call count given `--levels`, the L1 component count guess (from cluster count), and the flow-drill cap. (`estimateAiCalls`.)
+- [x] Multiply by a per-call cost prior (`COST_PER_CALL_PRIOR_USD = $0.30`).
+- [x] Print the plan via a new `plan` ProgressEvent emitted before the first Claude call. The CLI logs `Plan: ~26 AI calls, estimated ≤ $7.80 · per-call cap $0.50`. (Interactive `[y/N]` prompt deferred — would gate `--yes`/`--no-confirm` flags; current behavior is informational only.)
+- [x] Once the L1 root system completes, *refine* the estimate using the real L1 component count and emit a second `plan` event with `refined: true`.
+- [ ] Interactive confirmation prompt with `--yes` opt-out (deferred — informational print covers the surprise-cost concern).
 
 ## 15. File → diagram navigation
 

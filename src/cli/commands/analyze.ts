@@ -27,6 +27,16 @@ export interface AnalyzeArgs {
   quiet?: boolean;
 }
 
+function formatEta(idx: number, total: number, recentDurationsMs: number[]): string {
+  if (recentDurationsMs.length === 0 || idx >= total) return '';
+  const avgMs = recentDurationsMs.reduce((a, b) => a + b, 0) / recentDurationsMs.length;
+  const remaining = total - idx;
+  const etaSec = (remaining * avgMs) / 1000;
+  if (etaSec < 5) return '';
+  if (etaSec < 90) return ` · ~${Math.round(etaSec)}s left`;
+  return ` · ~${Math.round(etaSec / 60)}m left`;
+}
+
 export async function runAnalyzeCommand(args: AnalyzeArgs): Promise<number> {
   const verbosity = args.quiet ? 'quiet' : args.verbose ? 'verbose' : 'normal';
   const log = new Logger(verbosity);
@@ -59,6 +69,7 @@ export async function runAnalyzeCommand(args: AnalyzeArgs): Promise<number> {
 
   log.info(`Analysing ${k.cyan(repoRoot)} → ${k.gray(outputDir)}`);
 
+  const aiCallDurations: number[] = [];
   const onProgress = (e: ProgressEvent) => {
     switch (e.phase) {
       case 'scan':
@@ -70,12 +81,39 @@ export async function runAnalyzeCommand(args: AnalyzeArgs): Promise<number> {
       case 'cluster':
         log.update(`Clustered into ${e.moduleCount} modules`);
         break;
-      case 'ai':
-        log.update(
-          `${e.cached ? '↺ cache' : '✦ Claude'} ${e.kind} L${e.level} ${e.scope || '/'}` +
-            (e.durationMs ? ` (${(e.durationMs / 1000).toFixed(1)}s)` : ''),
+      case 'plan': {
+        const tag = e.refined ? 'Plan (refined)' : 'Plan';
+        const cap = e.perCallCapUsd ? ` · per-call cap $${e.perCallCapUsd.toFixed(2)}` : '';
+        log.info(
+          `${tag}: ~${e.aiCallTotal} AI calls, estimated ≤ ${k.cyan('$' + e.estimatedCostUsd.toFixed(2))}${cap}`,
         );
         break;
+      }
+      case 'ai': {
+        if (typeof e.durationMs === 'number' && !e.cached) {
+          aiCallDurations.push(e.durationMs);
+          if (aiCallDurations.length > 5) aiCallDurations.shift();
+        }
+        const idx =
+          typeof e.aiCallIndex === 'number' && typeof e.aiCallTotal === 'number'
+            ? ` [${e.aiCallIndex}/${e.aiCallTotal}]`
+            : '';
+        const cost =
+          typeof e.cumulativeCostUsd === 'number' && e.cumulativeCostUsd > 0
+            ? ` · $${e.cumulativeCostUsd.toFixed(2)}`
+            : '';
+        const eta =
+          typeof e.aiCallIndex === 'number' && typeof e.aiCallTotal === 'number' && aiCallDurations.length > 0
+            ? formatEta(e.aiCallIndex, e.aiCallTotal, aiCallDurations)
+            : '';
+        log.update(
+          `${e.cached ? '↺ cache' : '✦ Claude'} ${e.kind} L${e.level} ${e.scope || '/'}${idx}` +
+            (e.durationMs ? ` (${(e.durationMs / 1000).toFixed(1)}s)` : '') +
+            cost +
+            eta,
+        );
+        break;
+      }
       case 'write':
         log.update(`Writing ${e.diagrams} diagrams`);
         break;

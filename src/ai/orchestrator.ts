@@ -62,10 +62,54 @@ export type ProgressEvent =
   | { phase: 'scan'; message: string }
   | { phase: 'parse'; processed: number; total: number }
   | { phase: 'cluster'; moduleCount: number }
-  | { phase: 'ai'; kind: 'components' | 'flows'; scope: string; level: number; cached: boolean; durationMs?: number }
+  | {
+      phase: 'plan';
+      aiCallTotal: number;
+      estimatedCostUsd: number;
+      moduleCount: number;
+      perCallCapUsd?: number;
+      refined?: boolean;
+    }
+  | {
+      phase: 'ai';
+      kind: 'components' | 'flows';
+      scope: string;
+      level: number;
+      cached: boolean;
+      durationMs?: number;
+      costUsd?: number;
+      cumulativeCostUsd?: number;
+      aiCallIndex?: number;
+      aiCallTotal?: number;
+    }
   | { phase: 'write'; diagrams: number }
   | { phase: 'hint'; message: string }
   | { phase: 'done'; rootSystemId: string };
+
+/** Cost prior used by the pre-flight estimator (per-call, cold). */
+export const COST_PER_CALL_PRIOR_USD = 0.3;
+
+/**
+ * Upper-bound estimate of how many Claude calls a run will issue. Used by the
+ * pre-flight cost preview (#14) and the progress bar ETA (#3). Conservative —
+ * assumes the AI hits the per-level component cap on every branch and drills
+ * the maximum sub-flows.
+ */
+export function estimateAiCalls(moduleCount: number, levels: number, flowsEnabled: boolean): number {
+  const branching = Math.min(8, Math.max(1, moduleCount));
+  let systemCalls = 0;
+  for (let lvl = 1; lvl <= levels; lvl++) {
+    systemCalls += Math.pow(branching, lvl - 1);
+  }
+  if (!flowsEnabled) return Math.ceil(systemCalls);
+  let flowCalls = 0;
+  for (let lvl = 1; lvl <= levels; lvl++) {
+    const systemsAtLevel = Math.pow(branching, lvl - 1);
+    // Level 1: one flows call per system. Deeper levels: up to 3 drill calls per parent flow.
+    flowCalls += systemsAtLevel * (lvl === 1 ? 1 : 3);
+  }
+  return Math.ceil(systemCalls + flowCalls);
+}
 
 interface ClaudeComponentsResp {
   components: Array<{
@@ -133,7 +177,41 @@ export async function runAnalysis(opts: OrchestratorOpts): Promise<RunResult> {
       })
     : baseWriter;
   const cache = new AiCache(opts.outputDir, opts.cache);
-  const progress = opts.onProgress ?? (() => {});
+  const rawProgress = opts.onProgress ?? (() => {});
+
+  // Track the running pre-flight plan + enrich every 'ai' event with the
+  // cumulative cost / call counters so listeners can build a live progress bar
+  // and cost meter (#3 + #14).
+  const planState: { aiCallTotal: number | undefined; estimatedCostUsd: number } = {
+    aiCallTotal: undefined,
+    estimatedCostUsd: 0,
+  };
+  const progress = (e: ProgressEvent): void => {
+    if (e.phase === 'cluster' && planState.aiCallTotal === undefined) {
+      const total = estimateAiCalls(e.moduleCount, opts.levels, opts.flowsEnabled);
+      planState.aiCallTotal = total;
+      planState.estimatedCostUsd = total * COST_PER_CALL_PRIOR_USD;
+      rawProgress(e);
+      rawProgress({
+        phase: 'plan',
+        aiCallTotal: total,
+        estimatedCostUsd: planState.estimatedCostUsd,
+        moduleCount: e.moduleCount,
+        perCallCapUsd: opts.maxBudgetUsd,
+      });
+      return;
+    }
+    if (e.phase === 'ai') {
+      rawProgress({
+        ...e,
+        cumulativeCostUsd: writer.costUsd,
+        aiCallIndex: writer.callCount,
+        aiCallTotal: planState.aiCallTotal,
+      });
+      return;
+    }
+    rawProgress(e);
+  };
 
   if (!opts.dryRun) {
     if (!(await isClaudeAvailable())) throw new ClaudeUnavailableError();
@@ -186,6 +264,20 @@ export async function runAnalysis(opts: OrchestratorOpts): Promise<RunResult> {
   {
     const rootSystem = writer.get(rootSystemId);
     if (rootSystem && rootSystem.kind === 'system') {
+      // Refine the plan once we know the actual L1 component count.
+      const refined = estimateAiCalls(rootSystem.nodes.length, opts.levels, opts.flowsEnabled);
+      if (refined !== planState.aiCallTotal) {
+        planState.aiCallTotal = refined;
+        planState.estimatedCostUsd = refined * COST_PER_CALL_PRIOR_USD;
+        progress({
+          phase: 'plan',
+          aiCallTotal: refined,
+          estimatedCostUsd: planState.estimatedCostUsd,
+          moduleCount: rootSystem.nodes.length,
+          perCallCapUsd: opts.maxBudgetUsd,
+          refined: true,
+        });
+      }
       maybeSuggestRootScope(rootSystem, opts, rootScope, progress);
     }
   }

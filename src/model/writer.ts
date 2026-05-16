@@ -73,6 +73,14 @@ export class DiagramWriter {
     this.estimatedCostUsd += estimatedUsd;
   }
 
+  get callCount(): number {
+    return this.aiCallCount;
+  }
+
+  get costUsd(): number {
+    return this.estimatedCostUsd;
+  }
+
   flush(rootSystemId: string): DiagramIndex {
     const entries: DiagramIndexEntry[] = [];
     const flows: { id: string; title: string; trigger: FlowTrigger }[] = [];

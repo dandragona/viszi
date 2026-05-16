@@ -15,6 +15,7 @@ import { FlowStepNode, type FlowStepNodeData } from './nodes/FlowStepNode';
 import { layoutWithElk } from '../layout/elk';
 import { Icon } from './Icon';
 import { TRIGGER_ICON } from '../theme';
+import { FilesPanel, type FilesPanelData } from './FilesPanel';
 
 function parseHideHash(hash: string): Set<string> {
   if (!hash || hash.length < 2) return new Set();
@@ -55,6 +56,7 @@ export function DiagramCanvas({ diagram }: { diagram: AnyDiagram }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [layouted, setLayouted] = useState<Node<NodeData>[] | null>(null);
+  const [filesPanel, setFilesPanel] = useState<FilesPanelData | null>(null);
 
   const hidden = useMemo(() => parseHideHash(location.hash), [location.hash]);
 
@@ -76,9 +78,23 @@ export function DiagramCanvas({ diagram }: { diagram: AnyDiagram }) {
     navigate(`${location.pathname}${location.search}${writeHideHash(location.hash, new Set())}`, { replace: true });
   }, [location.hash, location.pathname, location.search, navigate]);
 
+  const onShowFiles = useCallback(
+    (id: string) => {
+      if (diagram.kind !== 'system') return;
+      const node = diagram.nodes.find((n) => n.id === id);
+      if (!node) return;
+      setFilesPanel({ label: node.label, files: node.files });
+    },
+    [diagram],
+  );
+  // Reset the files panel whenever the diagram changes (route nav).
+  useEffect(() => {
+    setFilesPanel(null);
+  }, [diagram.id]);
+
   const { initialNodes, edges } = useMemo(
-    () => buildFlowElements(diagram, onDrill, onHide, hidden),
-    [diagram, onDrill, onHide, hidden],
+    () => buildFlowElements(diagram, onDrill, onHide, onShowFiles, hidden),
+    [diagram, onDrill, onHide, onShowFiles, hidden],
   );
 
   useEffect(() => {
@@ -107,6 +123,7 @@ export function DiagramCanvas({ diagram }: { diagram: AnyDiagram }) {
           <button type="button" onClick={resetHidden}>Reset</button>
         </div>
       )}
+      {filesPanel && <FilesPanel data={filesPanel} onClose={() => setFilesPanel(null)} />}
       {!layouted ? (
         <div className="loading"><span className="spinner" /> Laying out…</div>
       ) : (
@@ -143,6 +160,7 @@ export function DiagramCanvas({ diagram }: { diagram: AnyDiagram }) {
 }
 
 function DiagramMeta({ diagram }: { diagram: AnyDiagram }) {
+  const mono = diagram.kind === 'flow' ? diagram.meta?.monoComponent : undefined;
   return (
     <div className="diagram-meta">
       <div className="title">{diagram.title}</div>
@@ -157,6 +175,11 @@ function DiagramMeta({ diagram }: { diagram: AnyDiagram }) {
           <>System · Level {diagram.level} · scope {(diagram as { scope: string }).scope}</>
         )}
       </div>
+      {mono && (
+        <div className="mono-component-note" title={`${Math.round(mono.share * 100)}% of steps live inside this component`}>
+          mostly internal to <strong>{mono.componentLabel}</strong>
+        </div>
+      )}
       {diagram.description && <div className="desc">{diagram.description}</div>}
     </div>
   );
@@ -194,6 +217,7 @@ function buildFlowElements(
   diagram: AnyDiagram,
   onDrill: (id: string) => void,
   onHide: (id: string) => void,
+  onShowFiles: (id: string) => void,
   hidden: Set<string>,
 ): {
   initialNodes: Node<NodeData>[];
@@ -213,6 +237,7 @@ function buildFlowElements(
           subDiagramId: n.subDiagramId,
           onDrill,
           onHide,
+          onShowFiles,
         } satisfies ComponentNodeData,
         position: { x: 0, y: 0 },
       }));

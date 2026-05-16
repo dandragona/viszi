@@ -74,8 +74,23 @@ export interface FlowDiagram {
   steps: FlowStep[];
   nodes: DiagramNode[];
   edges: DiagramEdge[];
-  /** Diagram-level metadata. Currently only `regenCacheKey` for `viszi regen`. */
-  meta?: { regenCacheKey?: string };
+  /**
+   * Diagram-level metadata.
+   *  - `regenCacheKey`: cache filename used by `viszi regen`.
+   *  - `monoComponent`: present when ≥ threshold of steps share one componentId,
+   *    meaning the flow is effectively a list of method calls on one component
+   *    rather than a multi-component interaction story. See #13 in
+   *    007_Post_Launch_TODO.md.
+   */
+  meta?: {
+    regenCacheKey?: string;
+    monoComponent?: {
+      componentId: string;
+      componentLabel: string;
+      /** Fraction of steps mapped to the dominant component (0–1). */
+      share: number;
+    };
+  };
 }
 
 export type AnyDiagram = SystemDiagram | FlowDiagram;
@@ -86,6 +101,12 @@ export interface DiagramIndexEntry {
   level: number;
   title: string;
   parentId?: string;
+  /**
+   * Set when a flow is "mostly internal to one component" (#13). The sidebar
+   * dims these and surfaces "mostly internal to X" — kept on the index so the
+   * sidebar can render without loading every individual diagram file.
+   */
+  monoComponent?: { componentLabel: string; share: number };
 }
 
 export interface DiagramIndex {

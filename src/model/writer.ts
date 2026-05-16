@@ -93,13 +93,20 @@ export class DiagramWriter {
     for (const d of this.diagrams.values()) {
       const file = resolve(diagramsSubdir(this.opts.outputDir), `${sanitizeId(d.id)}.json`);
       writeFileSync(file, JSON.stringify(d, null, 2), 'utf8');
-      entries.push({
+      const entry: DiagramIndexEntry = {
         id: d.id,
         kind: d.kind,
         level: d.level,
         title: d.title,
         parentId: d.parentId,
-      });
+      };
+      if (d.kind === 'flow') {
+        const mono = (d as FlowDiagram).meta?.monoComponent;
+        if (mono) {
+          entry.monoComponent = { componentLabel: mono.componentLabel, share: mono.share };
+        }
+      }
+      entries.push(entry);
       if (d.kind === 'flow' && d.level === 1) {
         flows.push({ id: d.id, title: d.title, trigger: (d as FlowDiagram).trigger });
       }

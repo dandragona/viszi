@@ -23,7 +23,7 @@ Hard numbers from the run described above:
 
 - [x] Switch the ELK layout direction for `kind: 'flow'` diagrams from `DOWN` to `RIGHT` (and apply the same to system diagrams for consistency — `layoutWithElk(..., { direction: 'RIGHT' })` in `src/web/components/DiagramCanvas.tsx`).
 - [x] Update `FlowStepNode` handles in `src/web/components/nodes/FlowStepNode.tsx` from `Position.Top` / `Position.Bottom` to `Position.Left` / `Position.Right` so React Flow draws horizontal edges.
-- [ ] Verify long step labels still fit — may need to bump node width or wrap text.
+- [x] Verified long step labels wrap cleanly: bumped `.viszi-node.flow-step` max-width 240→260px and added `overflow-wrap: anywhere; word-break: break-word; line-height: 1.3` to `.viszi-node .node-label`. The flow-step header now uses `align-items: flex-start` so the step-order chip pins to the first line of a multi-line label rather than floating in the vertical centre.
 - [ ] Move the drill-down chevron (`drill in →` / new badge from item 7) from the bottom of each step card to the right edge so it stays at the "exit" of the step under horizontal flow. *(handled inline by item 7.)*
 
 ## 2. Use more colors where they earn their keep
@@ -140,11 +140,11 @@ The cheapest, most composable fix is a new flag that lets the user push the anal
 
 **Gap:** in the reference run, the dominant flow has 8 steps; 7 of them reference the same `componentId`. The flow is functionally a list of method calls on one box rather than a multi-component interaction story. Several other flows in that run have the same shape.
 
-- [ ] After a flow is generated, compute `dominantShare = max(stepsPerComponent) / steps.length`. If `dominantShare >= 0.8`:
-  - [ ] **(simplest)** Tag the flow with `meta.monoComponent = true`; UI grays it out in the sidebar and adds a "mostly internal to X" subtitle.
-  - [ ] **(better)** Re-issue the flow request against the L2 sub-system of the dominant component, so the new flow's steps reference the *inner* components instead.
-  - [ ] **(strictest)** Drop the flow entirely from the index. It's not architectural signal.
-- [ ] Make the threshold configurable (`flows.monoComponentThreshold` in `viszi.config.json`).
+- [x] After a flow is generated, compute `dominantShare = max(stepsPerComponent) / steps.length`. If `dominantShare >= 0.8`:
+  - [x] **(simplest)** Tag the flow with `meta.monoComponent = { componentId, componentLabel, share }` (`computeMonoComponent` in `src/ai/orchestrator.ts`); UI dims the sidebar entry (`.tree-row-mono`) + appends a "·1" hint, and the diagram header renders a "mostly internal to X" note. Index entries carry the flag so the sidebar dims without loading the diagram file. Tests in `tests/ai/mono-component.test.ts`.
+  - [ ] **(better)** Re-issue the flow request against the L2 sub-system of the dominant component, so the new flow's steps reference the *inner* components instead. *(deferred — needs real-repo validation that the L2 sub-system is informative enough to re-prompt against.)*
+  - [ ] **(strictest)** Drop the flow entirely from the index. *(deferred — too destructive without real-repo signal that the flow is actually noise.)*
+- [x] Threshold is configurable: `flows.monoComponentThreshold` in `viszi.config.json` (default `MONO_COMPONENT_THRESHOLD_DEFAULT = 0.8`; set > 1 to disable). Documented in `004_Config_Spec.md` + emitted in `viszi init`.
 
 ## 14. Pre-flight cost preview
 
@@ -161,7 +161,7 @@ The cheapest, most composable fix is a new flag that lets the user push the anal
 **Gap:** a user reading a file in their editor has no way to ask viszi "where does this show up?" Both the search index (`search.json`) and every system diagram know which files belong to which component, so the data is there — but the UI doesn't expose it.
 
 - [x] Extended the Cmd-K command palette with a "files" mode: triggered by `f:` prefix or any `/` in the query. Lists every (file, diagram, component) location, ranked by path-boundary match strength + appearance count.
-- [ ] Node-card "(N files)" side-panel: not yet — files panel deferred. The palette-mode flow covers the primary use case (file → diagram navigation).
+- [x] Node-card "(N files)" side-panel: the chip on each `ComponentNode` is now a button that opens a `FilesPanel` (`src/web/components/FilesPanel.tsx`) in the top-right of the canvas — heading + count chip, full file list, "Copy" button to clipboard, Esc to close. Flow-step nodes don't carry files (#9 dedupe); they navigate via drill-in.
 - [x] Implemented client-side (`buildFileIndex` + `searchFiles` + `parseFileQuery` in `src/web/search.ts`) — no new server calls. Tests in `tests/web/file-index.test.ts`.
 
 ## 16. Search index is fat — intern repeated strings

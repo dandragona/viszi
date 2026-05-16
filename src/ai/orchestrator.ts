@@ -54,9 +54,23 @@ export interface VisziConfig {
   include?: string[];
   modules?: Record<string, string[]>;
   componentKinds?: Record<string, ComponentKind>;
-  flows?: { include?: string[]; exclude?: string[] };
+  flows?: {
+    include?: string[];
+    exclude?: string[];
+    /**
+     * Threshold (0–1) at or above which a flow is tagged `monoComponent` —
+     * i.e. so many steps share one componentId that the flow reads as a list
+     * of method calls on a single box rather than a multi-component story.
+     * Default 0.8. Set to >1 to disable. See #13 in 007_Post_Launch_TODO.md.
+     */
+    monoComponentThreshold?: number;
+  };
   ai?: { model?: string; maxBudgetUsd?: number; concurrency?: number };
 }
+
+/** Default share at which a flow is tagged mono-component. Configurable via
+ * `flows.monoComponentThreshold` in `viszi.config.json`. */
+export const MONO_COMPONENT_THRESHOLD_DEFAULT = 0.8;
 
 export type ProgressEvent =
   | { phase: 'scan'; message: string }
@@ -710,6 +724,7 @@ async function analyzeFlowsTier(args: FlowTierArgs): Promise<void> {
       scope,
       idOverride,
       titleOverride,
+      monoComponentThreshold: opts.config?.flows?.monoComponentThreshold,
     });
     flow.meta = { ...flow.meta, regenCacheKey: AiCache.filenameFor(cacheKey) };
     writer.add(flow);
@@ -802,6 +817,7 @@ function buildFlowDiagram(args: {
   scope: string;
   idOverride?: string;
   titleOverride?: string;
+  monoComponentThreshold?: number;
 }): FlowDiagram {
   const { flow, level, parentId, components, scope } = args;
   const id = args.idOverride ?? `flow.${shortHash(`${scope}|${flow.id}|${level}`)}`;
@@ -843,7 +859,7 @@ function buildFlowDiagram(args: {
     });
   }
 
-  return {
+  const diagram: FlowDiagram = {
     id,
     kind: 'flow',
     level,
@@ -854,6 +870,46 @@ function buildFlowDiagram(args: {
     steps,
     nodes,
     edges,
+  };
+
+  const mono = computeMonoComponent(steps, components, args.monoComponentThreshold);
+  if (mono) diagram.meta = { ...diagram.meta, monoComponent: mono };
+  return diagram;
+}
+
+/**
+ * #13 in 007_Post_Launch_TODO: detect flows that are functionally a list of
+ * actions inside one component. Returns the dominant component's id, label,
+ * and share when share ≥ threshold; otherwise undefined.
+ *
+ * Exported for direct unit testing — pure function of (steps, components,
+ * threshold). No side-effects.
+ */
+export function computeMonoComponent(
+  steps: FlowStep[],
+  components: DiagramNode[],
+  thresholdOverride?: number,
+): { componentId: string; componentLabel: string; share: number } | undefined {
+  if (steps.length === 0) return undefined;
+  const threshold = thresholdOverride ?? MONO_COMPONENT_THRESHOLD_DEFAULT;
+  if (threshold > 1) return undefined; // disabled
+  const counts = new Map<string, number>();
+  for (const s of steps) counts.set(s.componentId, (counts.get(s.componentId) ?? 0) + 1);
+  let dominantId = '';
+  let dominantCount = 0;
+  for (const [id, n] of counts) {
+    if (n > dominantCount) {
+      dominantId = id;
+      dominantCount = n;
+    }
+  }
+  const share = dominantCount / steps.length;
+  if (share < threshold) return undefined;
+  const comp = components.find((c) => c.id === dominantId);
+  return {
+    componentId: dominantId,
+    componentLabel: comp?.label ?? dominantId,
+    share,
   };
 }
 

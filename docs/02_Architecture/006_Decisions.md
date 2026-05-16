@@ -143,6 +143,18 @@ Each entry follows: **Decision · Context · Why · Consequences**.
 
 ---
 
+## ADR-013: Mono-component flow tagging is a post-processing hint, not a filter (2026-05)
+
+**Decision**: Flows where one componentId accounts for ≥ `flows.monoComponentThreshold` (default 0.8) of steps get a `meta.monoComponent = { componentId, componentLabel, share }` stamp at write time (`computeMonoComponent` in `src/ai/orchestrator.ts`). The flag is *advisory*: the sidebar dims the entry and the diagram header notes "mostly internal to X", but the flow is kept in the index and remains drill-able. The flag is also mirrored onto `DiagramIndexEntry` so the sidebar can dim without loading every diagram file.
+
+**Context**: On the real-repo reference run (`007_Post_Launch_TODO.md` #13), the dominant flow had 8 steps and 7 referenced the same `componentId` — functionally a list of method calls on one box rather than a multi-component story. Several other flows had the same shape. Removing them entirely would have made the index 30% smaller, but also opaque: the user wouldn't know the flow exists at all.
+
+**Why**: Demoting is reversible information; deleting is not. A user who suspects a flow was wrongly downgraded can still see it in the sidebar, click in, and judge. A user who finds the dim styling distracting can raise `monoComponentThreshold` above 1 to disable the heuristic outright. The simplest variant of the three options in the TODO (tag vs re-prompt vs drop) is also the lowest-risk: no extra AI calls, no schema bump, no behavior that depends on real-repo threshold tuning we haven't validated yet.
+
+**Consequences**: Index entries grow by one optional field on flow rows only (~30 bytes when present). Pure function `computeMonoComponent` is exported for direct unit tests in `tests/ai/mono-component.test.ts`. The "(better)" option from the TODO (re-prompt against the dominant component's L2 sub-system) and the "(strictest)" option (drop from index) remain open follow-ups; both can build on this tagging foundation when real-repo data justifies them.
+
+---
+
 ## ADR-007: Single npm package, not a monorepo
 
 **Decision**: One `package.json`. CLI, server, and web frontend all live under `src/`.

@@ -11,6 +11,7 @@ export interface ComponentNodeData {
   subDiagramId?: string;
   onDrill?: (id: string) => void;
   onHide?: (id: string) => void;
+  onShowFiles?: (id: string) => void;
 }
 
 export function ComponentNode({ data }: { data: ComponentNodeData }) {
@@ -35,6 +36,13 @@ export function ComponentNode({ data }: { data: ComponentNodeData }) {
     e.stopPropagation();
     if (nodeId && data.onHide) data.onHide(nodeId);
   };
+
+  const onShowFiles = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (nodeId && data.onShowFiles) data.onShowFiles(nodeId);
+  };
+  const hasFiles = !!(data.files && data.files.length > 0);
+  const filesClickable = hasFiles && !!data.onShowFiles;
 
   return (
     <div
@@ -69,7 +77,20 @@ export function ComponentNode({ data }: { data: ComponentNodeData }) {
       </div>
       {data.description && <div className="node-desc">{data.description}</div>}
       <div className="node-meta">
-        {data.files && data.files.length > 0 && <span>{data.files.length} files</span>}
+        {hasFiles && (
+          filesClickable ? (
+            <button
+              type="button"
+              className="node-files-chip"
+              onClick={onShowFiles}
+              title="View this component's files"
+            >
+              {data.files!.length} files
+            </button>
+          ) : (
+            <span>{data.files!.length} files</span>
+          )
+        )}
         {clickable && <span className="drill">drill in →</span>}
       </div>
       <Handle type="source" position={Position.Right} />

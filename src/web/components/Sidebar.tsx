@@ -159,7 +159,15 @@ function TreeNode({
   const hasKids = kids.length > 0;
   return (
     <>
-      <div className="tree-row" style={{ paddingLeft: 6 + depth * 12 }}>
+      <div
+        className={`tree-row${entry.monoComponent ? ' tree-row-mono' : ''}`}
+        style={{ paddingLeft: 6 + depth * 12 }}
+        title={
+          entry.monoComponent
+            ? `Mostly internal to ${entry.monoComponent.componentLabel} (${Math.round(entry.monoComponent.share * 100)}% of steps)`
+            : undefined
+        }
+      >
         {hasKids ? (
           <button
             type="button"

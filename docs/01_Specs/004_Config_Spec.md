@@ -22,6 +22,7 @@ interface VisziConfig {
   flows?: {
     include?: string[];               // flow-id allowlist (after AI emits them)
     exclude?: string[];               // flow-id denylist
+    monoComponentThreshold?: number;  // tag mono-component flows at this share (default 0.8)
   };
   ai?: {
     model?: string;                   // 'opus' | 'sonnet' | 'haiku' | full id

@@ -116,6 +116,21 @@ Each entry follows: **Decision · Context · Why · Consequences**.
 
 ---
 
+## ADR-011: Adaptive module clustering depth + member-id fallback (2026-05)
+
+**Decision**: `clusterIntoModules` does a two-pass clustering: first count files per coarse module id, then descend one segment deeper for any module that would exceed `FILES_PER_MODULE_LIMIT` (= 25) files. Additionally, the AI orchestrator's `resolveMemberFiles` accepts a `member` id that doesn't match a module id exactly: it falls back to prefix-matching in either direction (Claude refined further; Claude returned a coarser id).
+
+**Context**: On a real single-package Python codebase (`src/<one-package>/...`), the analyzer's original `moduleIdFor` collapsed all 100+ files under `src/<package>/` into one giant `<package>` module. Claude was then asked to refine that into sub-components and *invented* finer-grained module ids (`<package>/cli`, `<package>/api`, ...) that didn't exist in the analyzer's output. `moduleById.get(...)` returned `undefined`, every L2 component got `files: []`, and every drill-down chain past L2 silently broke.
+
+**Why**: Two independent defenses against the same class of problem.
+
+- The clustering-depth fix gives Claude finer-grained module ids in the first place, so it's less likely to invent ids that miss.
+- The fallback resolver tolerates the mismatch when Claude still picks ids the analyzer didn't produce — common for L2+ where Claude is reasoning about sub-systems.
+
+**Consequences**: Module list at L1 may have more nodes than before for big single-package repos (a feature for those repos, neutral for everything else). The fallback resolver adds two prefix scans per member id, which is O(modules × members) — negligible (modules typically ≤ 30, members ≤ 6). Cache keys naturally invalidate because `modulesForPrompt` output changes when the clustering changes. Unit-tested in `tests/ai/resolve-member-files.test.ts` and `tests/analyzer/modules-adaptive.test.ts`.
+
+---
+
 ## ADR-007: Single npm package, not a monorepo
 
 **Decision**: One `package.json`. CLI, server, and web frontend all live under `src/`.

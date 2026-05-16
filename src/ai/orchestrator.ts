@@ -353,7 +353,7 @@ function buildSystemDiagram(args: {
   const id = args.idOverride ?? systemDiagramId(scope);
 
   const nodes: DiagramNode[] = response.components.map((c) => {
-    const memberFiles = c.members.flatMap((mid) => moduleById.get(mid)?.files ?? []);
+    const memberFiles = uniqueFiles(c.members.flatMap((mid) => resolveMemberFiles(mid, modules, moduleById, scope)));
     const subId = level < opts.levels && memberFiles.length > 0 ? `${id}.${sanitizeIdLowerForId(c.id)}` : undefined;
     return {
       id: c.id,
@@ -396,6 +396,62 @@ function buildSystemDiagram(args: {
     nodes,
     edges,
   };
+}
+
+/**
+ * Map a Claude-returned `member` id to the analyzer files it references.
+ *
+ * Claude often invents finer- or coarser-grained module ids than the analyzer
+ * actually produced. This resolver handles three cases so the drill-through
+ * chain doesn't silently break (#8 in 007_Post_Launch_TODO):
+ *   1. Exact match — current behavior, fast path.
+ *   2. Claude refined further (e.g. mid="app/cli" while only "app" exists):
+ *      find the coarser parent module and filter its files to those whose
+ *      scope-relative path starts with `mid + "/"`.
+ *   3. Claude returned a coarser id (mid="app" while "app/cli", "app/api"
+ *      exist): union the children's files.
+ */
+export function resolveMemberFiles(
+  mid: string,
+  modules: Module[],
+  moduleById: Map<string, Module>,
+  scope: string,
+): string[] {
+  const direct = moduleById.get(mid);
+  if (direct) return direct.files;
+
+  const sp = scope.replace(/[/\\]+$/, '');
+  const stripScope = (rel: string): string => {
+    const norm = rel.replace(/\\/g, '/');
+    if (!sp) return norm;
+    return norm.startsWith(sp + '/') ? norm.slice(sp.length + 1) : norm;
+  };
+
+  // 2. Claude refined further than the analyzer did.
+  const parent = modules.find((m) => mid.startsWith(m.id + '/'));
+  if (parent) {
+    const matched = parent.files.filter((f) => stripScope(f).startsWith(mid + '/'));
+    if (matched.length > 0) return matched;
+  }
+
+  // 3. Claude returned a coarser id than the analyzer did.
+  const childModules = modules.filter((m) => m.id.startsWith(mid + '/'));
+  if (childModules.length > 0) {
+    return childModules.flatMap((m) => m.files);
+  }
+
+  return [];
+}
+
+function uniqueFiles(files: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const f of files) {
+    if (seen.has(f)) continue;
+    seen.add(f);
+    out.push(f);
+  }
+  return out;
 }
 
 function baseDirName(p: string): string {
@@ -501,9 +557,16 @@ async function analyzeFlowsTier(args: FlowTierArgs): Promise<void> {
 
     // Recurse: drill into each step that maps to a component which itself has
     // a sub-system diagram. Limit branching so we don't explode AI usage.
+    // Skip steps whose component has no sub-system — drilling them produces
+    // a re-labelling of the parent at the same granularity (#12 in
+    // 007_Post_Launch_TODO).
     if (level < opts.levels) {
       const concurrency = Math.max(1, opts.concurrency);
-      const drillable = flow.steps.filter((s) => s.subDiagramId === undefined);
+      const drillable = flow.steps.filter((s) => {
+        if (s.subDiagramId !== undefined) return false;
+        const comp = components.find((c) => c.id === s.componentId);
+        return Boolean(comp?.subDiagramId);
+      });
       const stepsToExpand = drillable.slice(0, Math.min(3, drillable.length));
       for (let i = 0; i < stepsToExpand.length; i += concurrency) {
         const batch = stepsToExpand.slice(i, i + concurrency);
@@ -595,6 +658,10 @@ function buildFlowDiagram(args: {
   }));
 
   // Build node + edge views suitable for React Flow rendering.
+  // NOTE: do not copy `comp.files` into each step's nodes[i].files — the same
+  // 100-file list was being inlined N times per flow, blowing search/index size
+  // (#9 in 007_Post_Launch_TODO). The frontend resolves files via `componentId`
+  // against the parent system diagram when it needs them.
   const nodes: DiagramNode[] = steps.map((s) => {
     const comp = components.find((c) => c.id === s.componentId);
     return {
@@ -602,7 +669,7 @@ function buildFlowDiagram(args: {
       label: s.action,
       kind: comp?.kind ?? 'unknown',
       description: s.description ?? comp?.label,
-      files: comp?.files ?? [],
+      files: [],
       subDiagramId: undefined,
       meta: { componentId: s.componentId, componentLabel: comp?.label, order: s.order },
     };

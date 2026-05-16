@@ -46,6 +46,7 @@ Files are clustered into modules using a heuristic:
 - If the path is `src/<sub>/...`, `lib/<sub>/...`, `app/<sub>/...`, `internal/<sub>/...`, `pkg/<sub>/...`, etc., the module is the first two segments (`src/auth`, `lib/db`).
 - Otherwise the module is the file's top-level directory.
 - Files at the very root are bucketed into `__root__`.
+- **Adaptive depth:** if the initial bucket would contain more than `FILES_PER_MODULE_LIMIT` files (default 25), the cluster descends one segment deeper so single-package repos (`src/<one-package>/...`) don't collapse into a single giant module. See ADR-011.
 
 Each `Module` carries: file list, total LOC, sample exported symbols (up to 32), HTTP handler count, and the set of other modules it imports from.
 

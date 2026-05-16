@@ -20,8 +20,15 @@ export interface Module {
  *    its module is the dir 1 level under that.
  * 2. Otherwise, the module is its top-level dir.
  * 3. Files at the very root get their own "root" module.
+ * 4. **Adaptive depth**: if the initial bucket would contain more than
+ *    `FILES_PER_MODULE_LIMIT` files, descend one level deeper. This prevents
+ *    `src/<one-package>/...` repos from collapsing into a single giant module
+ *    (#8 in 007_Post_Launch_TODO).
  */
 const TOP_LEVEL_PASSTHROUGH = new Set(['src', 'lib', 'app', 'internal', 'pkg', 'cmd', 'apps', 'packages']);
+
+/** Tunable: when a module would have more files than this, refine into sub-buckets. */
+export const FILES_PER_MODULE_LIMIT = 25;
 
 function moduleIdFor(rel: string, scopePrefix?: string): string {
   let path = rel;
@@ -38,11 +45,45 @@ function moduleIdFor(rel: string, scopePrefix?: string): string {
   return parts[0];
 }
 
+/** Try to push one segment deeper than `moduleIdFor` for adaptive refinement. */
+function moduleIdForDeeper(rel: string, scopePrefix?: string): string {
+  let path = rel;
+  if (scopePrefix && path.startsWith(scopePrefix)) {
+    path = path.slice(scopePrefix.length).replace(/^[/\\]+/, '');
+  }
+  const parts = path.split(sep).filter(Boolean);
+  if (parts.length === 0) return '__root__';
+  if (parts.length === 1) return '__root__';
+
+  if (TOP_LEVEL_PASSTHROUGH.has(parts[0]) && parts.length >= 4) {
+    return parts.slice(0, 3).join('/');
+  }
+  if (parts.length >= 3) {
+    return parts.slice(0, 2).join('/');
+  }
+  return moduleIdFor(rel, scopePrefix);
+}
+
+/** Choose an effective moduleId, descending when the initial bucket is too big. */
+function pickModuleId(rel: string, counts: Map<string, number>, scopePrefix?: string): string {
+  const initial = moduleIdFor(rel, scopePrefix);
+  if ((counts.get(initial) ?? 0) <= FILES_PER_MODULE_LIMIT) return initial;
+  const deeper = moduleIdForDeeper(rel, scopePrefix);
+  return deeper === initial ? initial : deeper;
+}
+
 export function clusterIntoModules(graph: DependencyGraph, scopePrefix?: string): Module[] {
+  // Pre-pass: count files per coarse moduleId so we can detect oversized buckets.
+  const counts = new Map<string, number>();
+  graph.forEachNode((id: string) => {
+    const mid = moduleIdFor(id, scopePrefix);
+    counts.set(mid, (counts.get(mid) ?? 0) + 1);
+  });
+
   const modules = new Map<string, Module>();
 
   graph.forEachNode((id: string, attrs: FileNodeAttrs) => {
-    const modId = moduleIdFor(id, scopePrefix);
+    const modId = pickModuleId(id, counts, scopePrefix);
     let mod = modules.get(modId);
     if (!mod) {
       mod = {
@@ -66,8 +107,8 @@ export function clusterIntoModules(graph: DependencyGraph, scopePrefix?: string)
   });
 
   graph.forEachEdge((_e: string, attrs: DepEdgeAttrs, source: string, target: string) => {
-    const sm = moduleIdFor(source, scopePrefix);
-    const tm = moduleIdFor(target, scopePrefix);
+    const sm = pickModuleId(source, counts, scopePrefix);
+    const tm = pickModuleId(target, counts, scopePrefix);
     if (sm === tm) return;
     const mod = modules.get(sm);
     if (!mod) return;

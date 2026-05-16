@@ -95,18 +95,18 @@ Hard numbers from the run described above:
 
 **Root cause (confirmed by reading the cache + diagrams from a real run):** Claude returns `members: ["app/cli", "app/sub-pkg", …]` for the L2 `App` system, but the analyzer's `clusterIntoModules(graph, "src")` produces just one module with id `"app"` — because `app` isn't in `TOP_LEVEL_PASSTHROUGH` (`src/analyzer/modules.ts:24`), so all 100+ files collapse into the single first-segment bucket. `buildSystemDiagram` then does `moduleById.get("app/cli")` → `undefined` → empty `memberFiles` → no `subDiagramId`. Claude was working from a single coarse module and *invented* finer-grained ids that look right but don't exist in the analyzer's output.
 
-- [ ] **Quick mitigation**: when `moduleById.get(mid)` misses, prefix-match (`mid + '/'`) against any module id and fall back to that module's files. Handles the common case where Claude refines a coarse module into sub-paths.
-- [ ] **Better fix**: extend `moduleIdFor()` so that when a single top-level dir contains many files, it walks one level deeper. Today the rule fires only for `TOP_LEVEL_PASSTHROUGH` parents; relax to "if my first-segment bucket has > N files, descend one more level".
+- [x] **Quick mitigation**: when `moduleById.get(mid)` misses, prefix-match (`mid + '/'`) against any module id and fall back to that module's files. Handles the common case where Claude refines a coarse module into sub-paths. (`resolveMemberFiles` in `src/ai/orchestrator.ts`; tests in `tests/ai/resolve-member-files.test.ts`.)
+- [x] **Better fix**: extend `moduleIdFor()` so that when a single top-level dir contains many files, it walks one level deeper. (Adaptive depth in `clusterIntoModules`; tests in `tests/analyzer/modules-adaptive.test.ts`. Threshold = `FILES_PER_MODULE_LIMIT = 25`.)
 - [ ] **Better still**: feed Claude the *actual* file paths inside each candidate module (a small tree) and require it to choose from those paths when building `members`. Validates the response at parse time.
-- [ ] Add an integration test (under `tests/integration/`) that builds a fixture mirroring this shape (single top-level package, ~10 sub-packages), runs `--levels 3 --dry-run`, and asserts every L2 component has `files.length > 0` and a `subDiagramId`. (The dry-run mock currently masks this bug — `mockComponents` uses 1:1 modules.)
+- [x] Unit tests for both above (the dry-run mock uses 1:1 modules and so can't exercise the resolver mismatch directly; covered via direct unit tests on `resolveMemberFiles` and `clusterIntoModules`).
 
 ## 9. Stop duplicating per-component file lists in every flow-step node
 
 **Gap:** in flow diagrams, each step's `nodes[i].files` is set to the **entire** `files` list of the parent component. In the reference run, the dominant flow has 8 steps, 7 of which reference the same `componentId` — so the 100-file list is inlined 7 times in one diagram. Aggregate: **9608 file references stored for ~120 unique files** (80× duplication). Also breaks "click a step to jump to the code that does this step" — the file list isn't scoped to the step, it's the whole component.
 
-- [ ] In `buildFlowDiagram` (`src/ai/orchestrator.ts`), stop copying `comp?.files ?? []` into every step's `nodes[i].files`. Store an empty array; let the frontend look up the component's files via `componentId` when it needs them.
-- [ ] Have the frontend resolve `step.componentId` against the parent system diagram (already linked via `parentId`) when rendering a step's metadata.
-- [ ] Update the schema in `src/ai/schemas.ts` if needed; bump `SCHEMA_VERSION`.
+- [x] In `buildFlowDiagram` (`src/ai/orchestrator.ts`), stop copying `comp?.files ?? []` into every step's `nodes[i].files`. Store an empty array; let the frontend look up the component's files via `componentId` when it needs them.
+- [x] Frontend already resolves `step.componentId` via `meta.componentId` / `meta.componentLabel` — `FlowStepNode` never read `files`, so no change needed.
+- [x] Schema unchanged — this is a writer-side dedupe, not an AI-prompt change. No `SCHEMA_VERSION` bump required.
 - [ ] **Optional, harder**: ask Claude to attribute a smaller list of step-relevant files (subset of the component) so step → file navigation becomes precise. Would need a prompt + schema change.
 
 ## 10. Filter out generic, "this step does what the component does"-style step labels
@@ -132,9 +132,9 @@ The cheapest, most composable fix is a new flag that lets the user push the anal
 
 **Gap:** `analyzeFlowsTier` drills into the first 3 steps of every flow regardless of whether the step's component has a sub-system. On the reference run that produces 78 sub-flow diagrams, many of which are just "the parent flow re-described at the same granularity" because their component had no L2/L3 to refine against. 78 of the 89 total diagrams are flow noise.
 
-- [ ] Before drilling a flow step, check whether `components.find(c => c.id === step.componentId)?.subDiagramId` is set. If not, the step has nothing meaningful to refine — skip it.
-- [ ] If a component *does* have a sub-system, fetch that sub-system from the writer and pass its sub-components in as the recursion target (today the code already does this via `subSystem.nodes`, but it falls back to a hollow list when missing).
-- [ ] Expected impact on the reference run: ~30% fewer diagrams, ~30% fewer flow AI calls, proportionally faster + cheaper.
+- [x] Before drilling a flow step, check whether `components.find(c => c.id === step.componentId)?.subDiagramId` is set. If not, the step has nothing meaningful to refine — skip it. (Implemented in `analyzeFlowsTier`, `src/ai/orchestrator.ts`.)
+- [x] If a component *does* have a sub-system, fetch that sub-system from the writer and pass its sub-components in as the recursion target (today the code already does this via `subSystem.nodes`, but it falls back to a hollow list when missing).
+- [ ] Expected impact on the reference run: ~30% fewer diagrams, ~30% fewer flow AI calls, proportionally faster + cheaper. *(needs validation on a real run with these changes.)*
 
 ## 13. Detect and collapse mono-component flows
 

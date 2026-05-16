@@ -101,6 +101,29 @@ button.primary:hover {
   box-shadow: 0 0 12px var(--accent);
 }
 
+.topbar-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  color: var(--fg-1);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s;
+}
+.topbar-back:hover:not(:disabled) {
+  background: rgba(96,165,250,0.10);
+  color: var(--fg-0);
+  border-color: rgba(96,165,250,0.45);
+}
+.topbar-back:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 .breadcrumbs {
   display: flex;
   align-items: center;
@@ -120,7 +143,9 @@ button.primary:hover {
 }
 .breadcrumbs .crumb:hover {
   background: rgba(255,255,255,0.04);
-  color: var(--fg-0);
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .breadcrumbs .crumb.current {
   color: var(--fg-0);

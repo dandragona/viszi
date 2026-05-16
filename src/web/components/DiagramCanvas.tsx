@@ -45,9 +45,9 @@ export function DiagramCanvas({ diagram }: { diagram: AnyDiagram }) {
 
   useEffect(() => {
     let cancelled = false;
-    layoutWithElk(initialNodes, edges, {
-      direction: diagram.kind === 'flow' ? 'DOWN' : 'RIGHT',
-    })
+    // Flow diagrams read left-to-right like every other sequence diagram tool.
+    // System diagrams also flow left-to-right (RIGHT in ELK terms).
+    layoutWithElk(initialNodes, edges, { direction: 'RIGHT' })
       .then((positioned) => {
         if (!cancelled) setLayouted(positioned as Node<NodeData>[]);
       })

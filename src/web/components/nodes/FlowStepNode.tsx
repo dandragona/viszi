@@ -28,7 +28,7 @@ export function FlowStepNode({ data }: { data: FlowStepNodeData }) {
       style={{ ...cssVars, borderColor: style.border }}
       onClick={() => data.subDiagramId && data.onDrill?.(data.subDiagramId)}
     >
-      <Handle type="target" position={Position.Top} />
+      <Handle type="target" position={Position.Left} />
       <div className="node-header">
         <span className="step-order">{data.order}</span>
         <span className="node-label">{data.label}</span>
@@ -42,7 +42,7 @@ export function FlowStepNode({ data }: { data: FlowStepNodeData }) {
         </div>
       )}
       {data.description && <div className="node-desc" style={{ marginTop: 6 }}>{data.description}</div>}
-      <Handle type="source" position={Position.Bottom} />
+      <Handle type="source" position={Position.Right} />
     </div>
   );
 }

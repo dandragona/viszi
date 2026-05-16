@@ -21,10 +21,10 @@ Hard numbers from the run described above:
 
 **Gap:** flow diagrams render top-to-bottom. For flows with 5–8 steps the canvas scrolls vertically and most steps fall below the fold; relationships read left-to-right in every other diagramming tool the user has seen.
 
-- [ ] Switch the ELK layout direction for `kind: 'flow'` diagrams from `DOWN` to `RIGHT` in `src/web/layout/elk.ts`.
-- [ ] Update `FlowStepNode` handles in `src/web/components/nodes/FlowStepNode.tsx` from `Position.Top` / `Position.Bottom` to `Position.Left` / `Position.Right` so React Flow draws horizontal edges.
+- [x] Switch the ELK layout direction for `kind: 'flow'` diagrams from `DOWN` to `RIGHT` (and apply the same to system diagrams for consistency — `layoutWithElk(..., { direction: 'RIGHT' })` in `src/web/components/DiagramCanvas.tsx`).
+- [x] Update `FlowStepNode` handles in `src/web/components/nodes/FlowStepNode.tsx` from `Position.Top` / `Position.Bottom` to `Position.Left` / `Position.Right` so React Flow draws horizontal edges.
 - [ ] Verify long step labels still fit — may need to bump node width or wrap text.
-- [ ] Move the drill-down chevron (`drill in →` / new badge from item 7) from the bottom of each step card to the right edge so it stays at the "exit" of the step under horizontal flow.
+- [ ] Move the drill-down chevron (`drill in →` / new badge from item 7) from the bottom of each step card to the right edge so it stays at the "exit" of the step under horizontal flow. *(handled inline by item 7.)*
 
 ## 2. Use more colors where they earn their keep
 
@@ -75,10 +75,10 @@ Hard numbers from the run described above:
 
 **Gap:** browser back works because routes are `/d/<id>`, but there's no visible affordance — users don't realise the breadcrumbs are clickable and end up trapped at depth. Bonus: keyboard `Esc` to pop up one level would feel natural.
 
-- [ ] Add a back button to the topbar (`src/web/components/Topbar.tsx`) that calls `navigate(-1)` when there's a history entry, or navigates to `parentId` from the index otherwise (handles direct deep links).
-- [ ] Show the back button only when the current diagram has a `parentId` (no point at the root).
-- [ ] Bind `Esc` (when the command palette is closed) to the same handler.
-- [ ] Make the breadcrumb segments more obviously clickable — underline on hover, pointer cursor, slightly brighter on the link colour.
+- [x] Add a back button to the topbar (`src/web/components/Topbar.tsx`) that calls `navigate(-1)` when there's a history entry, or navigates to `parentId` from the index otherwise (handles direct deep links).
+- [x] Show the back button only when the current diagram has a `parentId` (no point at the root) — `disabled` when `currentId === index.rootSystemId`.
+- [x] Bind `Esc` (when the command palette is closed) to the same handler. (Skips when an input/textarea/contentEditable is focused or the `[data-cmdk-open="true"]` palette is mounted.)
+- [x] Make the breadcrumb segments more obviously clickable — accent colour + underline on hover (`src/web/styles.css`).
 
 ## 7. Drill-down affordance on clickable components
 

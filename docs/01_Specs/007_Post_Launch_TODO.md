@@ -160,9 +160,9 @@ The cheapest, most composable fix is a new flag that lets the user push the anal
 
 **Gap:** a user reading a file in their editor has no way to ask viszi "where does this show up?" Both the search index (`search.json`) and every system diagram know which files belong to which component, so the data is there — but the UI doesn't expose it.
 
-- [ ] Extend the Cmd-K command palette (`src/web/components/CommandPalette.tsx`) with a "files" mode: typing a file path (or fragment) lists every diagram that contains that file, ranked by how prominent the file is in the diagram (e.g. by component LOC share).
-- [ ] On any node card that has files, add a small "(N files)" link that opens a side-panel listing them; clicking a file goes back into the palette in "this file appears in:" mode.
-- [ ] Doable entirely client-side from existing data — no new server calls, no AI.
+- [x] Extended the Cmd-K command palette with a "files" mode: triggered by `f:` prefix or any `/` in the query. Lists every (file, diagram, component) location, ranked by path-boundary match strength + appearance count.
+- [ ] Node-card "(N files)" side-panel: not yet — files panel deferred. The palette-mode flow covers the primary use case (file → diagram navigation).
+- [x] Implemented client-side (`buildFileIndex` + `searchFiles` + `parseFileQuery` in `src/web/search.ts`) — no new server calls. Tests in `tests/web/file-index.test.ts`.
 
 ## 16. Search index is fat — intern repeated strings
 

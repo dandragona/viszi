@@ -7,5 +7,6 @@ export default defineConfig({
     exclude: ['node_modules/**', 'dist/**', '.viszi/**'],
     reporters: process.env.CI ? ['default', 'github-actions'] : ['default'],
     testTimeout: 20_000,
+    setupFiles: ['./tests/setup.ts'],
   },
 });

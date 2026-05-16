@@ -71,6 +71,7 @@ export async function runRegenCommand(args: RegenArgs): Promise<number> {
     cache: true,
     dryRun: false,
     bare: false,
+    twoStage: false,
     verbose: !!args.verbose,
     quiet: !!args.quiet,
   });

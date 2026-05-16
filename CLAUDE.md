@@ -17,7 +17,7 @@ This file is loaded automatically into Claude Code sessions started inside this 
 ## Key invariants
 
 - **All inference goes through `src/ai/claude.ts`.** viszi never imports the Anthropic SDK directly; it shells out to the user's local `claude` CLI. If you find yourself importing `@anthropic-ai/sdk`, stop and use `callClaude()` instead.
-- **Parsers implement `LanguageParser`** (`src/analyzer/parsers/types.ts`). Add a new language by registering a parser in `src/analyzer/parsers/index.ts`. Parsers are regex-based today; that's intentional (no heavyweight tree-sitter runtime at install time).
+- **Parsers implement `LanguageParser`** (`src/analyzer/parsers/types.ts`). Add a new language by registering a parser in `src/analyzer/parsers/index.ts`. Python and Go parse via tree-sitter (`tree_sitter_python.ts`, `tree_sitter_go.ts`); JS/TS stays regex (`regex_js.ts`). The tree-sitter runtime + grammars are loaded once via `initTreeSitter()` — `runAnalysis` awaits it before any `parseFile`, and the vitest `setupFiles` (`tests/setup.ts`) does the same for tests. See ADR-014.
 - **`SCHEMA_VERSION` must bump** in `src/ai/schemas.ts` whenever the AI prompt **or** the JSON schema passed to Claude changes. The cache key includes this version, so a bump invalidates stale responses.
 - **`.viszi/` is the only directory viszi writes to.** Never write to the analysed repo outside of `<repoRoot>/.viszi/` (or the user-supplied `--output`).
 - **Diagrams are immutable once written.** The writer streams them out for live progress; downstream readers should treat them as append-only.

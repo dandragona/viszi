@@ -9,9 +9,19 @@ export interface FlowsPromptInput {
   parentStepAction?: string;
   level: number;
   totalLevels: number;
+  /**
+   * Optional free-text narrative from a prior stage-1 call describing the
+   * flows that should be emitted. See ADR-013 (two-stage AI).
+   */
+  explanation?: string;
 }
 
-export function buildFlowsPrompt(input: FlowsPromptInput): string {
+/**
+ * Stage-1 prompt for flows: ask Claude to list the important flows in prose
+ * before producing the schema-constrained JSON. The narrative is injected
+ * back into the stage-2 prompt via `FlowsPromptInput.explanation`.
+ */
+export function buildFlowsExplanationPrompt(input: Omit<FlowsPromptInput, 'explanation'>): string {
   const {
     scope,
     componentSummary,
@@ -27,11 +37,67 @@ export function buildFlowsPrompt(input: FlowsPromptInput): string {
     ? `\nThis is a sub-flow drilling into the step "${parentStepAction ?? ''}" of the parent flow "${parentFlowName}".`
     : '';
 
-  return `You are an expert software architect. You are identifying the **important user-visible or system-critical flows** in this codebase.
+  const guidance =
+    level === 1
+      ? `Cover, in this order:
+
+1. **The 3-8 most important user-visible or system-critical flows** — name each one (e.g. "User signs up", "Process payment", "Sync data from upstream"). One sentence per flow on what triggers it and what its outcome is.
+2. **For each flow, the rough sequence of components it touches** — just the component labels in order, no step-level detail yet. This is the spine the stage-2 call will fill in.
+3. **The one flow a new engineer should read first** — call it out explicitly.`
+      : `Cover:
+
+1. **1-4 meaningful sub-sequences** that elaborate the parent step.
+2. For each, the components touched, in order.`;
+
+  return `You are an expert software architect studying this codebase's runtime behavior. **Do not produce a diagram yet.** Write a short narrative (150-250 words) describing the important flows in this scope.
 
 Scope: \`${scope || '/'}\`
 Flow tier: ${level} of ${totalLevels}${subContext}
 Codebase summary: ${graphSummary.files} files, ~${graphSummary.loc} LOC, ${graphSummary.edges} import edges.
+
+Components present in this scope:
+
+\`\`\`json
+${JSON.stringify(componentSummary, null, 2)}
+\`\`\`
+
+Detected entry points (HTTP routes, CLI commands, cron jobs, init scripts):
+
+\`\`\`json
+${JSON.stringify(entrypoints.slice(0, 30), null, 2)}
+\`\`\`
+
+${guidance}
+
+Be **specific to this codebase** — name actual routes, commands, or business operations. Do not invent flows that aren't grounded in the components or entrypoints above. Do not output JSON. This narrative will be the only context for the next call, which produces the structured flow diagrams.`;
+}
+
+export function buildFlowsPrompt(input: FlowsPromptInput): string {
+  const {
+    scope,
+    componentSummary,
+    entrypoints,
+    graphSummary,
+    parentFlowName,
+    parentStepAction,
+    level,
+    totalLevels,
+    explanation,
+  } = input;
+
+  const subContext = parentFlowName
+    ? `\nThis is a sub-flow drilling into the step "${parentStepAction ?? ''}" of the parent flow "${parentFlowName}".`
+    : '';
+
+  const explanationBlock = explanation
+    ? `\n\n## Prior flows narrative\n\nA stage-1 call produced this narrative naming the flows that should exist in this scope and the components each one touches. Use it as the ground truth for flow naming, trigger classification, and which components each flow's steps reference. If a flow named in the narrative is missing from your output, you have made a mistake.\n\n<prior_explanation>\n${explanation.trim()}\n</prior_explanation>`
+    : '';
+
+  return `You are an expert software architect. You are identifying the **important user-visible or system-critical flows** in this codebase.
+
+Scope: \`${scope || '/'}\`
+Flow tier: ${level} of ${totalLevels}${subContext}
+Codebase summary: ${graphSummary.files} files, ~${graphSummary.loc} LOC, ${graphSummary.edges} import edges.${explanationBlock}
 
 Components present in this scope:
 

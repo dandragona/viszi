@@ -2,6 +2,7 @@ import { resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { traverse } from '../analyzer/traverse.js';
 import { parseFile, type ParsedFile } from '../analyzer/parsers/index.js';
+import { initTreeSitter } from '../analyzer/parsers/tree_sitter_base.js';
 import { buildDependencyGraph, summarize } from '../analyzer/graph.js';
 import { clusterIntoModules, modulesForPrompt, type Module } from '../analyzer/modules.js';
 import { detectEntrypoints, type Entrypoint } from '../analyzer/entrypoints.js';
@@ -19,10 +20,10 @@ import type {
   SystemDiagram,
 } from '../model/types.js';
 import { shortHash } from '../shared/paths.js';
-import { callClaude, ClaudeUnavailableError, isClaudeAvailable } from './claude.js';
+import { callClaude, callClaudeText, ClaudeUnavailableError, isClaudeAvailable } from './claude.js';
 import { ComponentsSchema, FlowsSchema } from './schemas.js';
-import { buildComponentsPrompt } from './prompts/components.js';
-import { buildFlowsPrompt } from './prompts/flows.js';
+import { buildComponentsExplanationPrompt, buildComponentsPrompt } from './prompts/components.js';
+import { buildFlowsExplanationPrompt, buildFlowsPrompt } from './prompts/flows.js';
 import { AiCache } from './cache.js';
 
 export interface OrchestratorOpts {
@@ -44,6 +45,13 @@ export interface OrchestratorOpts {
    * a leading/trailing slash is tolerated. See TODO 007 #11.
    */
   rootScope?: string;
+  /**
+   * Use the two-stage AI pipeline: first emit a free-text architectural
+   * narrative, then pass that narrative as context to the schema-constrained
+   * call. Roughly doubles AI calls per scope but tends to produce better
+   * component names, edge selection, and step labels. See ADR-013.
+   */
+  twoStage?: boolean;
   onProgress?: (event: ProgressEvent) => void;
   /** Called whenever a diagram is added to the writer (live broadcast hook). */
   onDiagramAdded?: (diagram: AnyDiagram) => void;
@@ -86,7 +94,7 @@ export type ProgressEvent =
     }
   | {
       phase: 'ai';
-      kind: 'components' | 'flows';
+      kind: 'components' | 'flows' | 'components-explain' | 'flows-explain';
       scope: string;
       level: number;
       cached: boolean;
@@ -109,20 +117,28 @@ export const COST_PER_CALL_PRIOR_USD = 0.3;
  * assumes the AI hits the per-level component cap on every branch and drills
  * the maximum sub-flows.
  */
-export function estimateAiCalls(moduleCount: number, levels: number, flowsEnabled: boolean): number {
+export function estimateAiCalls(
+  moduleCount: number,
+  levels: number,
+  flowsEnabled: boolean,
+  twoStage: boolean = false,
+): number {
   const branching = Math.min(8, Math.max(1, moduleCount));
   let systemCalls = 0;
   for (let lvl = 1; lvl <= levels; lvl++) {
     systemCalls += Math.pow(branching, lvl - 1);
   }
-  if (!flowsEnabled) return Math.ceil(systemCalls);
   let flowCalls = 0;
-  for (let lvl = 1; lvl <= levels; lvl++) {
-    const systemsAtLevel = Math.pow(branching, lvl - 1);
-    // Level 1: one flows call per system. Deeper levels: up to 3 drill calls per parent flow.
-    flowCalls += systemsAtLevel * (lvl === 1 ? 1 : 3);
+  if (flowsEnabled) {
+    for (let lvl = 1; lvl <= levels; lvl++) {
+      const systemsAtLevel = Math.pow(branching, lvl - 1);
+      // Level 1: one flows call per system. Deeper levels: up to 3 drill calls per parent flow.
+      flowCalls += systemsAtLevel * (lvl === 1 ? 1 : 3);
+    }
   }
-  return Math.ceil(systemCalls + flowCalls);
+  const base = systemCalls + flowCalls;
+  // Two-stage doubles every AI call (one prose stage + one structured stage).
+  return Math.ceil(twoStage ? base * 2 : base);
 }
 
 interface ClaudeComponentsResp {
@@ -202,7 +218,7 @@ export async function runAnalysis(opts: OrchestratorOpts): Promise<RunResult> {
   };
   const progress = (e: ProgressEvent): void => {
     if (e.phase === 'cluster' && planState.aiCallTotal === undefined) {
-      const total = estimateAiCalls(e.moduleCount, opts.levels, opts.flowsEnabled);
+      const total = estimateAiCalls(e.moduleCount, opts.levels, opts.flowsEnabled, opts.twoStage);
       planState.aiCallTotal = total;
       planState.estimatedCostUsd = total * COST_PER_CALL_PRIOR_USD;
       rawProgress(e);
@@ -230,6 +246,8 @@ export async function runAnalysis(opts: OrchestratorOpts): Promise<RunResult> {
   if (!opts.dryRun) {
     if (!(await isClaudeAvailable())) throw new ClaudeUnavailableError();
   }
+
+  await initTreeSitter();
 
   const rootScope = normalizeRootScope(opts.rootScope);
 
@@ -280,7 +298,12 @@ export async function runAnalysis(opts: OrchestratorOpts): Promise<RunResult> {
     onSystemAdded: (rootSystem) => {
       if (rootSystem.level !== 1) return;
       // Refine the plan once we know the actual L1 component count.
-      const refined = estimateAiCalls(rootSystem.nodes.length, opts.levels, opts.flowsEnabled);
+      const refined = estimateAiCalls(
+        rootSystem.nodes.length,
+        opts.levels,
+        opts.flowsEnabled,
+        opts.twoStage,
+      );
       if (refined !== planState.aiCallTotal) {
         planState.aiCallTotal = refined;
         planState.estimatedCostUsd = refined * COST_PER_CALL_PRIOR_USD;
@@ -372,16 +395,44 @@ async function analyzeSystemTier(args: SystemTierArgs): Promise<SystemDiagram | 
     modules: modulesForPrompt(modules) as Array<unknown>,
     graphSummary: summarize(subgraph),
   };
+
+  // Stage 1 (optional): free-text architectural narrative. Cached separately
+  // so a stage-2 retry doesn't pay for stage 1 twice. Skipped in dry-run.
+  let explanation: string | undefined;
+  if (opts.twoStage && !opts.dryRun) {
+    explanation = await runExplanationStage({
+      opts,
+      cache,
+      progress,
+      writer,
+      cacheKey: {
+        promptName: 'components-explain',
+        scope,
+        level,
+        contentHash: AiCache.hashContent(promptInput),
+      },
+      buildPrompt: () =>
+        buildComponentsExplanationPrompt({
+          ...promptInput,
+          modules: promptInput.modules as ReturnType<typeof modulesForPrompt>,
+        }),
+      progressKind: 'components',
+    });
+  }
+
   const prompt = buildComponentsPrompt({
     ...promptInput,
     modules: promptInput.modules as ReturnType<typeof modulesForPrompt>,
+    explanation,
   });
 
+  // Including `explanation` in the cache key means a stage-1 re-run that
+  // produces different prose invalidates the stage-2 cache for this scope.
   const cacheKey = {
     promptName: 'components',
     scope,
     level,
-    contentHash: AiCache.hashContent(promptInput),
+    contentHash: AiCache.hashContent({ ...promptInput, explanation }),
   };
   let resp = cache.get<ClaudeComponentsResp>(cacheKey);
   const cached = !!resp;
@@ -678,11 +729,29 @@ async function analyzeFlowsTier(args: FlowTierArgs): Promise<void> {
     parentStepAction: args.parentStepAction,
   };
 
+  let explanation: string | undefined;
+  if (opts.twoStage && !opts.dryRun) {
+    explanation = await runExplanationStage({
+      opts,
+      cache,
+      progress,
+      writer,
+      cacheKey: {
+        promptName: level === 1 ? 'flows-explain' : 'subflows-explain',
+        scope,
+        level,
+        contentHash: AiCache.hashContent(promptInput),
+      },
+      buildPrompt: () => buildFlowsExplanationPrompt(promptInput),
+      progressKind: 'flows',
+    });
+  }
+
   const cacheKey = {
     promptName: level === 1 ? 'flows' : 'subflows',
     scope,
     level,
-    contentHash: AiCache.hashContent(promptInput),
+    contentHash: AiCache.hashContent({ ...promptInput, explanation }),
   };
   let resp = cache.get<ClaudeFlowsResp>(cacheKey);
   const cached = !!resp;
@@ -693,7 +762,7 @@ async function analyzeFlowsTier(args: FlowTierArgs): Promise<void> {
       resp = mockFlows(summary, entrypoints);
     } else {
       const result = await callClaude<ClaudeFlowsResp>({
-        prompt: buildFlowsPrompt(promptInput),
+        prompt: buildFlowsPrompt({ ...promptInput, explanation }),
         schema: FlowsSchema,
         cwd: opts.repoRoot,
         maxBudgetUsd: opts.maxBudgetUsd,
@@ -778,6 +847,60 @@ async function analyzeFlowsTier(args: FlowTierArgs): Promise<void> {
       }
     }
   }
+}
+
+/**
+ * Stage 1 of the two-stage AI pipeline. Runs a no-schema `callClaudeText` call
+ * with the supplied prompt, caches the prose under its own cache key, and
+ * emits an `ai` progress event. Returns `undefined` on dry-run or when both
+ * stages would no-op so callers can fall back to single-stage cleanly.
+ */
+async function runExplanationStage(args: {
+  opts: OrchestratorOpts;
+  cache: AiCache;
+  progress: (e: ProgressEvent) => void;
+  writer: DiagramWriter;
+  cacheKey: { promptName: string; scope: string; level: number; contentHash: string };
+  buildPrompt: () => string;
+  progressKind: 'components' | 'flows';
+}): Promise<string | undefined> {
+  const { opts, cache, progress, writer, cacheKey, buildPrompt, progressKind } = args;
+  let prose = cache.get<string>(cacheKey);
+  const cached = !!prose;
+  let durationMs: number | undefined;
+  let costUsd: number | undefined;
+
+  if (!prose) {
+    const result = await callClaudeText({
+      prompt: buildPrompt(),
+      cwd: opts.repoRoot,
+      maxBudgetUsd: opts.maxBudgetUsd,
+      model: opts.model,
+      bare: opts.bare,
+      addDirs: [opts.repoRoot],
+    });
+    prose = result.data;
+    durationMs = result.durationMs;
+    costUsd = result.costUsd;
+    writer.recordAiCall(result.costUsd ?? 0);
+    cache.set(cacheKey, prose);
+  } else {
+    writer.recordAiCall(0);
+  }
+
+  progress({
+    phase: 'ai',
+    kind: progressKind === 'components' ? 'components-explain' : 'flows-explain',
+    scope: cacheKey.scope,
+    level: cacheKey.level,
+    cached,
+    durationMs,
+    costUsd,
+    cumulativeCostUsd: writer.costUsd,
+    aiCallIndex: writer.callCount,
+  });
+
+  return prose;
 }
 
 function readScopedParsed(repoRoot: string, files: string[]): ParsedFile[] {

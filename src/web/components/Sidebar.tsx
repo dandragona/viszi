@@ -55,15 +55,7 @@ export function Sidebar(props: { index: DiagramIndex }) {
   const root = index.diagrams.find((d) => d.id === index.rootSystemId);
   const children = useMemo(() => buildChildrenMap(index), [index]);
 
-  const [expanded, setExpanded] = useState<Set<string>>(() => {
-    const initial = loadExpanded();
-    // First-time visitors: expand the root system + each top-level flow.
-    if (initial.size === 0) {
-      if (root) initial.add(root.id);
-      for (const f of index.flows) initial.add(f.id);
-    }
-    return initial;
-  });
+  const [expanded, setExpanded] = useState<Set<string>>(() => loadExpanded());
 
   useEffect(() => {
     saveExpanded(expanded);

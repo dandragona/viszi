@@ -41,19 +41,21 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "npm run build:web && npm run build:cli",
+    "build": "npm run build:grammars && npm run build:web && npm run build:cli",
     "build:cli": "tsc -p tsconfig.cli.json",
     "build:web": "vite build",
+    "build:grammars": "node scripts/build-grammars.mjs",
     "dev:web": "vite",
     "dev:cli": "tsc -p tsconfig.cli.json --watch",
-    "clean": "rm -rf dist .viszi *.tsbuildinfo",
+    "clean": "rm -rf dist grammars .viszi *.tsbuildinfo",
     "typecheck": "tsc -p tsconfig.cli.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,json}\" \"docs/**/*.md\" \"*.md\" \"*.json\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css,json}\" \"docs/**/*.md\" \"*.md\" \"*.json\"",
     "test": "vitest run",
     "test:watch": "vitest",
-    "smoke": "node bin/viszi.js --help"
+    "smoke": "node bin/viszi.js --help",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@fastify/static": "^7.0.4",
@@ -69,7 +71,7 @@
     "kleur": "^4.1.5",
     "open": "^10.1.0",
     "ora": "^8.1.1",
-    "web-tree-sitter": "^0.23.0",
+    "web-tree-sitter": "^0.23.2",
     "ws": "^8.20.1"
   },
   "devDependencies": {
@@ -90,6 +92,7 @@
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0",
     "reactflow": "^11.11.4",
+    "tree-sitter-wasms": "^0.1.13",
     "typescript": "^5.6.3",
     "vite": "^5.4.10",
     "vitest": "^2.1.4"

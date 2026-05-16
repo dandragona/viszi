@@ -37,6 +37,8 @@ export interface CallClaudeOpts {
   addDirs?: string[];
 }
 
+export type CallClaudeTextOpts = Omit<CallClaudeOpts, 'schema'>;
+
 export interface ClaudeCallResult<T> {
   data: T;
   costUsd?: number;
@@ -66,11 +68,16 @@ export class ClaudeCallError extends Error {
 /**
  * Build the argv passed to `claude`. Exported for unit tests so we can guard
  * against regressions on flag-shape decisions (notably `--add-dir=<path>`).
+ *
+ * When `opts.schema` is omitted the call runs in text mode — `--json-schema`
+ * is not passed and Claude returns a free-text response in `result`.
  */
-export function buildClaudeArgs(opts: CallClaudeOpts): string[] {
+export function buildClaudeArgs(opts: CallClaudeOpts | CallClaudeTextOpts): string[] {
   const args: string[] = ['-p'];
   args.push('--output-format', 'json');
-  args.push('--json-schema', JSON.stringify(opts.schema));
+  if ('schema' in opts && opts.schema) {
+    args.push('--json-schema', JSON.stringify(opts.schema));
+  }
   if (opts.maxBudgetUsd !== undefined) {
     args.push('--max-budget-usd', String(opts.maxBudgetUsd));
   }
@@ -102,8 +109,15 @@ interface ClaudeEnvelope {
  * Throws `ClaudeCallError` for malformed JSON, claude-reported errors, or
  * unexpected shapes. Exported so we can unit-test envelope changes — the live
  * `claude` CLI envelope has evolved across versions.
+ *
+ * Pass `mode: 'text'` for runs invoked without `--json-schema` — returns the
+ * raw `result` string as-is instead of trying to JSON-parse it.
  */
-export function parseClaudeEnvelope<T>(stdout: string, stderr = ''): { data: T; costUsd?: number } {
+export function parseClaudeEnvelope<T>(
+  stdout: string,
+  stderr = '',
+  mode: 'json' | 'text' = 'json',
+): { data: T; costUsd?: number } {
   let envelope: unknown;
   try {
     envelope = JSON.parse(stdout);
@@ -125,6 +139,16 @@ export function parseClaudeEnvelope<T>(stdout: string, stderr = ''): { data: T; 
   // (and non-schema runs) only populate `result`. Prefer the structured field
   // when present so we don't have to re-parse the summary string.
   const raw = env.structured_output ?? env.result;
+  if (mode === 'text') {
+    if (typeof raw !== 'string') {
+      throw new ClaudeCallError(
+        `Claude text mode expected a string result, got ${typeof raw}`,
+        stderr,
+        stdout,
+      );
+    }
+    return { data: raw as T, costUsd: env.total_cost_usd };
+  }
   let data: T;
   if (typeof raw === 'string') {
     try {
@@ -166,15 +190,10 @@ function claudeErrorMessage(env: ClaudeEnvelope): string {
   return 'Claude reported an error';
 }
 
-/**
- * Invoke Claude Code in non-interactive mode with a JSON-schema-constrained
- * response. Returns the parsed structured result.
- */
-export async function callClaude<T>(opts: CallClaudeOpts): Promise<ClaudeCallResult<T>> {
-  const start = Date.now();
-  const args = buildClaudeArgs(opts);
-
-  let result: { stdout: string; stderr: string };
+async function runClaudeSubprocess(
+  args: string[],
+  opts: { cwd?: string; timeoutMs?: number },
+): Promise<{ stdout: string; stderr: string }> {
   // execa returns a thenable that doubles as the child handle — keep both so we
   // can track the child in `inflight` until the promise settles.
   const child = execa('claude', args, {
@@ -189,7 +208,7 @@ export async function callClaude<T>(opts: CallClaudeOpts): Promise<ClaudeCallRes
   });
   inflight.add(child);
   try {
-    result = await child;
+    return await child;
   } catch (raw) {
     const err = raw as ExecaError;
     if (err.code === 'ENOENT') {
@@ -203,8 +222,31 @@ export async function callClaude<T>(opts: CallClaudeOpts): Promise<ClaudeCallRes
   } finally {
     inflight.delete(child);
   }
+}
 
+/**
+ * Invoke Claude Code in non-interactive mode with a JSON-schema-constrained
+ * response. Returns the parsed structured result.
+ */
+export async function callClaude<T>(opts: CallClaudeOpts): Promise<ClaudeCallResult<T>> {
+  const start = Date.now();
+  const args = buildClaudeArgs(opts);
+  const result = await runClaudeSubprocess(args, opts);
   const { data, costUsd } = parseClaudeEnvelope<T>(result.stdout, result.stderr);
+  return { data, costUsd, durationMs: Date.now() - start };
+}
+
+/**
+ * Invoke Claude Code in text mode — no `--json-schema`, no structured-output
+ * envelope. Used for the stage-1 "explain in prose" half of the two-stage
+ * generation pipeline; the resulting prose is fed back into the schema-
+ * constrained call as additional context.
+ */
+export async function callClaudeText(opts: CallClaudeTextOpts): Promise<ClaudeCallResult<string>> {
+  const start = Date.now();
+  const args = buildClaudeArgs(opts);
+  const result = await runClaudeSubprocess(args, opts);
+  const { data, costUsd } = parseClaudeEnvelope<string>(result.stdout, result.stderr, 'text');
   return { data, costUsd, durationMs: Date.now() - start };
 }
 

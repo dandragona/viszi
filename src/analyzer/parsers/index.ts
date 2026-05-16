@@ -2,8 +2,8 @@ import { readFileSync } from 'node:fs';
 import type { Language } from '../languages.js';
 import type { LanguageParser, ParsedFile } from './types.js';
 import { JsLikeParser } from './regex_js.js';
-import { PythonParser } from './regex_python.js';
-import { GoParser } from './regex_go.js';
+import { PythonTreeSitterParser } from './tree_sitter_python.js';
+import { GoTreeSitterParser } from './tree_sitter_go.js';
 
 const REGISTRY = new Map<Language, LanguageParser>();
 
@@ -13,8 +13,8 @@ function register(parser: LanguageParser) {
 }
 
 register(new JsLikeParser());
-register(new PythonParser());
-register(new GoParser());
+register(new PythonTreeSitterParser());
+register(new GoTreeSitterParser());
 
 export function getParser(language: Language): LanguageParser | undefined {
   return REGISTRY.get(language);

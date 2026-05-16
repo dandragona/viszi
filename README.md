@@ -77,7 +77,7 @@ See `docs/02_Architecture/` for the full design.
 viszi . --dry-run
 ```
 
-**`--bare` mode is the default.** `viszi` invokes `claude --bare` so the user's hooks, MCP servers, and `CLAUDE.md` files don't leak into the analysis prompt. Use `--no-bare` to opt into your full Claude environment.
+**Optional `--bare` mode.** By default `viszi` runs `claude` in its normal mode, so your existing Claude Code OAuth session is used and your project `CLAUDE.md` / hooks / MCP servers apply as usual. Pass `--bare` to suppress all of that for fully predictable analysis — but note that `claude --bare` also disables OAuth, so `--bare` requires `ANTHROPIC_API_KEY` to be set.
 
 See [Anthropic's privacy policy](https://www.anthropic.com/legal/privacy) and the [Claude Code documentation](https://docs.claude.com/en/docs/claude-code/overview) for what Claude Code itself does with the conversation.
 

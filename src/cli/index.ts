@@ -45,11 +45,18 @@ program
   .option('--no-open', "Don't auto-open the browser")
   .option('--no-serve', 'Generate only — do not start the server')
   .option('--concurrency <n>', 'Parallel Claude calls', parseIntStrict('concurrency'), 4)
-  .option('--max-budget-usd <amount>', 'Per-call USD budget', parseFloatStrict('max-budget-usd'), 0.5)
+  .option(
+    '--max-budget-usd <amount>',
+    'Per-call USD budget cap (default: unbounded — passes nothing to `claude --max-budget-usd`)',
+    parseFloatStrict('max-budget-usd'),
+  )
   .option('--no-cache', 'Disable response cache')
   .option('--dry-run', 'Skip Claude calls; emit synthetic diagrams (offline)')
-  .option('--bare', 'Run Claude in --bare mode (skip hooks/MCP/CLAUDE.md)', true)
-  .option('--no-bare', 'Run Claude with the user\'s full environment')
+  .option(
+    '--bare',
+    'Run Claude in `--bare` mode. Skips user hooks/MCP/CLAUDE.md for predictable analysis, but disables OAuth/keychain auth — requires ANTHROPIC_API_KEY.',
+    false,
+  )
   .addOption(new Option('--model <name>', 'Claude model alias or full id (e.g. opus, sonnet)'))
   .option('-v, --verbose', 'Verbose logging')
   .option('-q, --quiet', 'Errors only')
@@ -63,10 +70,10 @@ program
       open: opts.open !== false,
       serve: opts.serve !== false,
       concurrency: opts.concurrency as number,
-      maxBudgetUsd: opts.maxBudgetUsd as number,
+      maxBudgetUsd: opts.maxBudgetUsd as number | undefined,
       cache: opts.cache !== false,
       dryRun: !!opts.dryRun,
-      bare: opts.bare !== false,
+      bare: !!opts.bare,
       model: opts.model as string | undefined,
       verbose: !!opts.verbose,
       quiet: !!opts.quiet,

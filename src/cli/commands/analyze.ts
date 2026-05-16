@@ -16,7 +16,7 @@ export interface AnalyzeArgs {
   open: boolean;
   serve: boolean;
   concurrency: number;
-  maxBudgetUsd: number;
+  maxBudgetUsd?: number;
   cache: boolean;
   dryRun: boolean;
   bare: boolean;

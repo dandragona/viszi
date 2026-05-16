@@ -31,7 +31,7 @@ export interface OrchestratorOpts {
   levels: number;
   flowsEnabled: boolean;
   concurrency: number;
-  maxBudgetUsd: number;
+  maxBudgetUsd?: number;
   cache: boolean;
   model?: string;
   bare?: boolean;

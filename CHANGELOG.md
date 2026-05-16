@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+- **`--bare` is now opt-in** (was default-on). `claude --bare` disables OAuth/keychain auth and requires `ANTHROPIC_API_KEY`; since viszi assumes the user is already authenticated via Claude Code, defaulting `--bare` on broke the first-run experience for the modal OAuth user. The `--no-bare` flag is removed (no longer needed). See ADR-006 for the revised reasoning.
+- **`--max-budget-usd` default removed.** The CLI no longer ships a $0.50 per-call cap; if you don't pass the flag, viszi forwards nothing to `claude --max-budget-usd` and `claude` runs uncapped. Pass `--max-budget-usd 0.5` (or any number) to re-impose a cap.
+
 ### Fixed
 - Claude CLI compatibility (`2.1.x`): `--add-dir` is variadic in current builds and was swallowing the prompt; viszi now passes `--add-dir=<path>` (one flag per dir, `=` form) so the prompt remains unambiguously positional.
 - Envelope parsing: prefer `envelope.structured_output` over `envelope.result` when present, since current `claude -p --json-schema` builds return the schema-conformant payload in `structured_output` and a free-text summary in `result`. Falls back to `result` for older builds. See ADR-010.

@@ -16,11 +16,10 @@ Analyse a codebase and serve interactive diagrams.
 | `--no-open` | open | Don't auto-open the browser |
 | `--no-serve` | serve | Generate diagrams only — don't start the server |
 | `--concurrency <n>` | `4` | Parallel `claude` subprocess calls |
-| `--max-budget-usd <n>` | `0.50` | Per-call USD budget cap (passed to `claude --max-budget-usd`) |
+| `--max-budget-usd <n>` | unbounded | Per-call USD budget cap; omitted by default so `claude` runs with no per-call cap. Pass a number (e.g. `0.5`) to forward `--max-budget-usd` to `claude`. |
 | `--no-cache` | cache on | Disable on-disk response cache |
 | `--dry-run` | off | Skip Claude entirely; emit synthetic stub diagrams. Useful for offline dev or estimating output structure |
-| `--bare` | on | Run `claude` in `--bare` mode (skip hooks/MCP/CLAUDE.md). On by default for predictable analysis |
-| `--no-bare` | | Use the user's full Claude environment |
+| `--bare` | off | Run `claude` in `--bare` mode (skip hooks/MCP/CLAUDE.md). Off by default because `claude --bare` also disables OAuth/keychain auth — requires `ANTHROPIC_API_KEY` to be set. |
 | `--model <name>` | claude default | Override the Claude model alias (`opus`, `sonnet`, etc) |
 | `-v, --verbose` | off | Verbose progress output |
 | `-q, --quiet` | off | Errors only |

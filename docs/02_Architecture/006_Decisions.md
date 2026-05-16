@@ -62,15 +62,18 @@ Each entry follows: **Decision · Context · Why · Consequences**.
 
 ---
 
-## ADR-006: `--bare` mode by default for `claude` invocations
+## ADR-006: `--bare` mode is opt-in (was: default-on)
 
-**Decision**: When viszi calls `claude -p`, we pass `--bare` by default. Users can opt out with `--no-bare`.
+**Decision**: `viszi` invokes `claude -p` **without** `--bare` by default. Users opt in with `--bare` when they want hook/MCP/CLAUDE.md-free analysis.
 
-**Context**: Claude Code respects user hooks, MCP servers, CLAUDE.md, and skills. A user with project-specific skills could get smarter analysis — or could have a `Stop` hook that hangs viszi.
+**Context (original)**: We originally defaulted to `--bare` for predictable, repeatable analysis — Claude Code respects user hooks, MCP servers, CLAUDE.md, and skills, and a user with a `Stop` hook or a chatty MCP could derail the run.
 
-**Why**: Predictable, repeatable analysis is more important by default than personalisation. Power users can flip it.
+**Why we flipped**: `claude --bare` does more than skip hooks. Per the CLI help, it also disables OAuth and keychain reads — auth is strictly via `ANTHROPIC_API_KEY` or `apiKeyHelper`. Since viszi's premise is "you already have Claude Code authenticated", defaulting to `--bare` forced every user without an API key set to either (a) configure one or (b) discover and pass `--no-bare`. That's a poor first-run experience for the modal user, who is OAuth-authenticated.
 
-**Consequences**: We don't benefit from a user's tuning unless they ask for it. We avoid hard-to-debug failures from foreign hook configurations.
+**Consequences**:
+- First-run `viszi <path>` Just Works for OAuth users — no extra auth setup.
+- User-installed hooks, MCP servers, and project `CLAUDE.md` files may influence the analysis. In practice the `--json-schema`-constrained prompt is robust to this; in pathological cases the user can pass `--bare` (and an API key) for clean-room behaviour.
+- The `--no-bare` flag is gone (default is now off; no need for a way to disable). Existing scripts that passed `--no-bare` will still parse — `--bare` defaults to false, and there is nothing to "un-do".
 
 ---
 

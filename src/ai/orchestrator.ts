@@ -1,4 +1,4 @@
-import { relative, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { traverse } from '../analyzer/traverse.js';
 import { parseFile, type ParsedFile } from '../analyzer/parsers/index.js';
@@ -8,6 +8,7 @@ import { detectEntrypoints, type Entrypoint } from '../analyzer/entrypoints.js';
 import { isCode } from '../analyzer/languages.js';
 import { DiagramWriter } from '../model/writer.js';
 import type {
+  AnyDiagram,
   ComponentKind,
   DiagramEdge,
   DiagramNode,
@@ -17,7 +18,7 @@ import type {
   FlowTrigger,
   SystemDiagram,
 } from '../model/types.js';
-import { sanitizeId, shortHash } from '../shared/paths.js';
+import { shortHash } from '../shared/paths.js';
 import { callClaude, ClaudeUnavailableError, isClaudeAvailable } from './claude.js';
 import { ComponentsSchema, FlowsSchema } from './schemas.js';
 import { buildComponentsPrompt } from './prompts/components.js';
@@ -38,7 +39,7 @@ export interface OrchestratorOpts {
   config?: VisziConfig;
   onProgress?: (event: ProgressEvent) => void;
   /** Called whenever a diagram is added to the writer (live broadcast hook). */
-  onDiagramAdded?: (diagram: import('../model/types.js').AnyDiagram) => void;
+  onDiagramAdded?: (diagram: AnyDiagram) => void;
 }
 
 export interface VisziConfig {
@@ -111,7 +112,7 @@ export async function runAnalysis(opts: OrchestratorOpts): Promise<RunResult> {
     ? new Proxy(baseWriter, {
         get(target, prop, receiver) {
           if (prop === 'add') {
-            return (d: import('../model/types.js').AnyDiagram) => {
+            return (d: AnyDiagram) => {
               target.add(d);
               onDiagramAdded(d);
             };
@@ -248,7 +249,7 @@ async function analyzeSystemTier(args: SystemTierArgs): Promise<SystemDiagram | 
     contentHash: AiCache.hashContent(promptInput),
   };
   let resp = cache.get<ClaudeComponentsResp>(cacheKey);
-  let cached = !!resp;
+  const cached = !!resp;
   let durationMs: number | undefined;
 
   if (!resp) {
@@ -398,7 +399,7 @@ function buildSystemDiagram(args: {
 }
 
 function baseDirName(p: string): string {
-  return p.split(/[\/\\]/).filter(Boolean).pop() ?? 'codebase';
+  return p.split(/[/\\]/).filter(Boolean).pop() ?? 'codebase';
 }
 
 function systemDiagramId(scope: string, suffix?: string): string {
@@ -456,7 +457,7 @@ async function analyzeFlowsTier(args: FlowTierArgs): Promise<void> {
     contentHash: AiCache.hashContent(promptInput),
   };
   let resp = cache.get<ClaudeFlowsResp>(cacheKey);
-  let cached = !!resp;
+  const cached = !!resp;
   let durationMs: number | undefined;
 
   if (!resp) {
@@ -492,7 +493,6 @@ async function analyzeFlowsTier(args: FlowTierArgs): Promise<void> {
       level,
       parentId: args.parentId,
       components,
-      opts,
       scope,
       idOverride,
       titleOverride,
@@ -577,12 +577,11 @@ function buildFlowDiagram(args: {
   level: number;
   parentId?: string;
   components: DiagramNode[];
-  opts: OrchestratorOpts;
   scope: string;
   idOverride?: string;
   titleOverride?: string;
 }): FlowDiagram {
-  const { flow, level, parentId, components, opts, scope } = args;
+  const { flow, level, parentId, components, scope } = args;
   const id = args.idOverride ?? `flow.${shortHash(`${scope}|${flow.id}|${level}`)}`;
 
   const componentIds = new Set(components.map((c) => c.id));
@@ -710,6 +709,3 @@ function guessKind(id: string): ComponentKind {
   if (/lib|util|helper|shared/.test(lower)) return 'library';
   return 'service';
 }
-
-// keep unused-import warning quiet for `relative` (path utility used elsewhere)
-void relative;

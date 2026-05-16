@@ -63,6 +63,24 @@ Drop a `.viszi.json` at your repo root to override module groupings, exclude pat
 
 See `docs/02_Architecture/` for the full design.
 
+## Privacy — what gets sent to Anthropic
+
+`viszi` calls Anthropic only through your **local Claude Code CLI** (the `claude` command on your `PATH`). It does not import the Anthropic SDK or use a separate API key. Inference is billed against whatever account your Claude Code is already authenticated as.
+
+**What gets sent.** Each AI call ships a **structural summary** that the analyzer builds locally — module ids, file paths, LOC counts, exported symbol names (regex-extracted identifiers), HTTP handler routes, and inter-module import/call edges. Claude Code is also given read access to the analysed directory (`--add-dir`), so the underlying Claude session may read source files on demand to refine its answer.
+
+**What does not get sent.** `viszi` does not bulk-upload raw file contents. It does not exfiltrate files outside the analysed directory. It does not send environment variables, dotfiles outside the repo, or anything from your shell history.
+
+**Opt out of inference entirely.** Run with `--dry-run` to preview the UI with synthetic stub diagrams and **no network call to Anthropic at all**:
+
+```bash
+viszi . --dry-run
+```
+
+**`--bare` mode is the default.** `viszi` invokes `claude --bare` so the user's hooks, MCP servers, and `CLAUDE.md` files don't leak into the analysis prompt. Use `--no-bare` to opt into your full Claude environment.
+
+See [Anthropic's privacy policy](https://www.anthropic.com/legal/privacy) and the [Claude Code documentation](https://docs.claude.com/en/docs/claude-code/overview) for what Claude Code itself does with the conversation.
+
 ## License
 
 MIT

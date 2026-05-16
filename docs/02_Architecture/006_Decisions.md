@@ -98,6 +98,21 @@ Each entry follows: **Decision · Context · Why · Consequences**.
 
 ---
 
+## ADR-010: Adapt to current `claude -p` envelope + variadic flags (2026-05)
+
+**Decision**: When invoking `claude -p`, pass `--add-dir=<path>` (the `=` form, one flag per dir) and parse `structured_output` from the envelope in preference to `result`.
+
+**Context**: While running the SIGINT manual test against a fresh fixture, viszi failed on every Claude invocation under the current `claude` CLI (`2.1.143`). Two unrelated regressions surfaced:
+
+1. `--add-dir` is documented as `<directories...>` (variadic). Writing it as `args.push('--add-dir', ...opts.addDirs)` let claude's argument parser swallow the very next positional — the prompt itself — as another directory. Claude then exited with `Error: Input must be provided either through stdin or as a prompt argument when using --print`.
+2. When `--json-schema` is supplied, current builds put the schema-conformant payload in `envelope.structured_output` and a free-text summary in `envelope.result`. Older builds populated `result` directly. viszi's parser expected the JSON in `result`, so every call threw `Claude returned a string result that is not parseable JSON`.
+
+**Why**: Both are stable, minimally invasive adapter changes. The `=` form binds a single value per flag and is robust against future variadic expansions. Preferring `structured_output` and falling back to `result` keeps compatibility with both old and new claude builds.
+
+**Consequences**: viszi can now successfully drive real Claude calls on the current CLI. We pin the assumption "claude CLI envelope shape" to two fields (`structured_output`, `result`); a future envelope change would need a parallel adapter update here. No new dependencies.
+
+---
+
 ## ADR-007: Single npm package, not a monorepo
 
 **Decision**: One `package.json`. CLI, server, and web frontend all live under `src/`.

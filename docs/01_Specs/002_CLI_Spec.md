@@ -50,6 +50,16 @@ Bundle an existing analysis into a single self-contained `.html` file.
 | `--output <dir>` | `<path>/.viszi` | Source analysis directory |
 | `--out <file>` | `<name>-viszi.html` in cwd | Output HTML path |
 
+### `viszi init [path]`
+
+Write a starter `.viszi.json` (and optionally a `.viszi-ignore`) at the given path. Useful as a discoverable starting point: every supported field is shown as a commented example with its default. The default behaviour refuses to overwrite an existing `.viszi.json` — pass `--force` to replace it.
+
+| Flag | Default | Description |
+|---|---|---|
+| `[path]` | `.` | Directory to write the config into |
+| `--force` | off | Overwrite an existing `.viszi.json` / `.viszi-ignore` |
+| `--with-ignore` | off | Also write a `.viszi-ignore` template alongside the config |
+
 ## Exit codes
 
 | Code | Meaning |
@@ -70,6 +80,8 @@ viszi . --model opus --max-budget-usd 1.0
 viszi serve ./somewhere
 viszi export . --out my-system.html  # single shareable HTML
 viszi clear .
+viszi init .                         # write a starter .viszi.json
+viszi init . --with-ignore --force   # also write .viszi-ignore, overwriting any existing files
 ```
 
 ## Help text

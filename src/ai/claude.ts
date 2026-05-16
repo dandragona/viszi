@@ -1,4 +1,29 @@
-import { execa, type ExecaError } from 'execa';
+import { execa, type ExecaError, type ResultPromise } from 'execa';
+
+// In-flight `claude` children so we can terminate them on SIGINT.
+const inflight = new Set<ResultPromise>();
+
+/**
+ * Send SIGTERM to every in-flight `claude` subprocess. Idempotent.
+ * Called by the CLI's SIGINT handler so Ctrl-C doesn't leave orphan processes.
+ */
+export function terminateInflightClaude(signal: NodeJS.Signals = 'SIGTERM'): number {
+  let killed = 0;
+  for (const child of inflight) {
+    try {
+      child.kill(signal);
+      killed++;
+    } catch {
+      /* already dead */
+    }
+  }
+  return killed;
+}
+
+/** Visible for tests: how many `claude` subprocesses are currently running. */
+export function inflightClaudeCount(): number {
+  return inflight.size;
+}
 
 export interface CallClaudeOpts {
   prompt: string;
@@ -39,11 +64,10 @@ export class ClaudeCallError extends Error {
 }
 
 /**
- * Invoke Claude Code in non-interactive mode with a JSON-schema-constrained
- * response. Returns the parsed structured result.
+ * Build the argv passed to `claude`. Exported for unit tests so we can guard
+ * against regressions on flag-shape decisions (notably `--add-dir=<path>`).
  */
-export async function callClaude<T>(opts: CallClaudeOpts): Promise<ClaudeCallResult<T>> {
-  const start = Date.now();
+export function buildClaudeArgs(opts: CallClaudeOpts): string[] {
   const args: string[] = ['-p'];
   args.push('--output-format', 'json');
   args.push('--json-schema', JSON.stringify(opts.schema));
@@ -52,53 +76,55 @@ export async function callClaude<T>(opts: CallClaudeOpts): Promise<ClaudeCallRes
   }
   if (opts.model) args.push('--model', opts.model);
   if (opts.bare) args.push('--bare');
+  // `--add-dir` is variadic in current `claude` CLI builds: writing it as
+  // `--add-dir /path` would let the very next positional argument (our prompt!)
+  // be swallowed as another directory. The `--add-dir=<path>` form binds a
+  // single value, leaving the prompt unambiguously positional.
   if (opts.addDirs?.length) {
-    args.push('--add-dir', ...opts.addDirs);
+    for (const d of opts.addDirs) args.push(`--add-dir=${d}`);
   }
   args.push(opts.prompt);
+  return args;
+}
 
-  let result: { stdout: string; stderr: string };
-  try {
-    result = await execa('claude', args, {
-      cwd: opts.cwd,
-      timeout: opts.timeoutMs ?? 5 * 60_000,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      reject: true,
-    });
-  } catch (raw) {
-    const err = raw as ExecaError;
-    if (err.code === 'ENOENT') {
-      throw new ClaudeUnavailableError();
-    }
-    throw new ClaudeCallError(
-      err.shortMessage ?? err.message,
-      typeof err.stderr === 'string' ? err.stderr : undefined,
-      typeof err.stdout === 'string' ? err.stdout : undefined,
-    );
-  }
+interface ClaudeEnvelope {
+  result?: unknown;
+  structured_output?: unknown;
+  total_cost_usd?: number;
+  is_error?: boolean;
+  error?: string;
+  errors?: unknown;
+  subtype?: string;
+}
 
+/**
+ * Parse and validate the JSON envelope `claude -p --output-format json` emits.
+ * Throws `ClaudeCallError` for malformed JSON, claude-reported errors, or
+ * unexpected shapes. Exported so we can unit-test envelope changes — the live
+ * `claude` CLI envelope has evolved across versions.
+ */
+export function parseClaudeEnvelope<T>(stdout: string, stderr = ''): { data: T; costUsd?: number } {
   let envelope: unknown;
   try {
-    envelope = JSON.parse(result.stdout);
+    envelope = JSON.parse(stdout);
   } catch (err) {
     throw new ClaudeCallError(
       `Could not parse Claude JSON envelope: ${(err as Error).message}`,
-      result.stderr,
-      result.stdout,
+      stderr,
+      stdout,
     );
   }
 
-  const env = envelope as {
-    result?: unknown;
-    total_cost_usd?: number;
-    is_error?: boolean;
-    error?: string;
-  };
+  const env = envelope as ClaudeEnvelope;
   if (env.is_error) {
-    throw new ClaudeCallError(env.error ?? 'Claude reported an error', result.stderr, result.stdout);
+    throw new ClaudeCallError(claudeErrorMessage(env), stderr, stdout);
   }
 
-  const raw = env.result;
+  // Current `claude -p --json-schema` builds put the schema-conformant payload
+  // in `structured_output` and a free-text summary in `result`. Older builds
+  // (and non-schema runs) only populate `result`. Prefer the structured field
+  // when present so we don't have to re-parse the summary string.
+  const raw = env.structured_output ?? env.result;
   let data: T;
   if (typeof raw === 'string') {
     try {
@@ -109,8 +135,8 @@ export async function callClaude<T>(opts: CallClaudeOpts): Promise<ClaudeCallRes
       if (!match) {
         throw new ClaudeCallError(
           'Claude returned a string result that is not parseable JSON',
-          result.stderr,
-          result.stdout,
+          stderr,
+          stdout,
         );
       }
       data = JSON.parse(match[0]) as T;
@@ -120,16 +146,66 @@ export async function callClaude<T>(opts: CallClaudeOpts): Promise<ClaudeCallRes
   } else {
     throw new ClaudeCallError(
       `Claude returned an unexpected envelope shape: ${typeof raw}`,
-      result.stderr,
-      result.stdout,
+      stderr,
+      stdout,
     );
   }
 
-  return {
-    data,
-    costUsd: env.total_cost_usd,
-    durationMs: Date.now() - start,
-  };
+  return { data, costUsd: env.total_cost_usd };
+}
+
+function claudeErrorMessage(env: ClaudeEnvelope): string {
+  if (typeof env.error === 'string' && env.error.length > 0) return env.error;
+  if (Array.isArray(env.errors)) {
+    const first = env.errors.find((e): e is string => typeof e === 'string' && e.length > 0);
+    if (first) return first;
+  }
+  if (typeof env.subtype === 'string' && env.subtype.length > 0) {
+    return `Claude reported an error (${env.subtype})`;
+  }
+  return 'Claude reported an error';
+}
+
+/**
+ * Invoke Claude Code in non-interactive mode with a JSON-schema-constrained
+ * response. Returns the parsed structured result.
+ */
+export async function callClaude<T>(opts: CallClaudeOpts): Promise<ClaudeCallResult<T>> {
+  const start = Date.now();
+  const args = buildClaudeArgs(opts);
+
+  let result: { stdout: string; stderr: string };
+  // execa returns a thenable that doubles as the child handle — keep both so we
+  // can track the child in `inflight` until the promise settles.
+  const child = execa('claude', args, {
+    cwd: opts.cwd,
+    timeout: opts.timeoutMs ?? 5 * 60_000,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    reject: true,
+    // `cleanup: true` is execa's default — children are terminated when the
+    // parent exits. We pass it explicitly so a future execa upgrade can't
+    // silently flip the default.
+    cleanup: true,
+  });
+  inflight.add(child);
+  try {
+    result = await child;
+  } catch (raw) {
+    const err = raw as ExecaError;
+    if (err.code === 'ENOENT') {
+      throw new ClaudeUnavailableError();
+    }
+    throw new ClaudeCallError(
+      err.shortMessage ?? err.message,
+      typeof err.stderr === 'string' ? err.stderr : undefined,
+      typeof err.stdout === 'string' ? err.stdout : undefined,
+    );
+  } finally {
+    inflight.delete(child);
+  }
+
+  const { data, costUsd } = parseClaudeEnvelope<T>(result.stdout, result.stderr);
+  return { data, costUsd, durationMs: Date.now() - start };
 }
 
 /**

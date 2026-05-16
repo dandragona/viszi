@@ -1,0 +1,31 @@
+name: Feature request
+description: Suggest a new feature or behavioural change
+title: '[feat]: '
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Start with the user pain, not the feature. "I'm trying to X, but…"
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behaviour
+      description: How would you like viszi to behave? Include CLI flags, config fields, or UI changes if relevant.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've considered
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Anything that helps with scoping
+      description: e.g. languages affected, repo sizes that matter, parsers you'd need extended.

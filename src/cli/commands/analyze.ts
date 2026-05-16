@@ -5,6 +5,7 @@ import { Logger, k } from '../logger.js';
 import { loadConfig } from '../config.js';
 import { startServer } from '../../server/index.js';
 import { EventBus } from '../../server/eventBus.js';
+import { terminateInflightClaude } from '../../ai/claude.js';
 
 export interface AnalyzeArgs {
   path?: string;
@@ -89,6 +90,32 @@ export async function runAnalyzeCommand(args: AnalyzeArgs): Promise<number> {
       return 3;
     }
   }
+
+  // Ctrl-C: terminate in-flight `claude` children, close the server, then exit
+  // cleanly. Completed cache entries are already flushed to disk by AiCache.set,
+  // so a re-run picks up where we left off.
+  let interrupted = false;
+  const onSigint = () => {
+    if (interrupted) {
+      // Second Ctrl-C: bail without waiting for cleanup.
+      process.exit(130);
+    }
+    interrupted = true;
+    const killed = terminateInflightClaude('SIGTERM');
+    log.warn(
+      `Interrupted — terminating ${killed} in-flight claude call${killed === 1 ? '' : 's'} and closing server…`,
+    );
+    void (async () => {
+      try {
+        bus?.error('Interrupted by user (SIGINT).');
+        await server?.close();
+      } finally {
+        process.exit(130);
+      }
+    })();
+  };
+  process.on('SIGINT', onSigint);
+  process.on('SIGTERM', onSigint);
 
   log.start('Walking files…');
   bus?.start();

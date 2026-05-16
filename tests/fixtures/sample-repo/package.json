@@ -1,0 +1,11 @@
+{
+  "name": "sample-repo",
+  "version": "0.0.0",
+  "main": "src/index.ts",
+  "bin": {
+    "sample": "src/cli.ts"
+  },
+  "scripts": {
+    "start": "node src/index.ts"
+  }
+}

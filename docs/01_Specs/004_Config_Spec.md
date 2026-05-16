@@ -9,6 +9,8 @@
 5. `viszi.config.json`
 6. `viszi.config.js`
 
+JSON variants (`.viszirc`, `.viszirc.json`, `.viszi.json`, `viszi.config.json`) accept `//` line comments and `/* … */` block comments — viszi strips them before parsing. `viszi init` emits a heavily commented `.viszi.json` so every supported field is discoverable.
+
 ## Schema (TypeScript)
 
 ```ts
@@ -57,3 +59,13 @@ interface VisziConfig {
 ## Precedence vs. CLI flags
 
 CLI flags **always win** over config-file values. Config-file values **always win** over heuristic defaults.
+
+## Generating a starter config
+
+```
+viszi init .                 # writes .viszi.json
+viszi init . --with-ignore   # also writes a .viszi-ignore template
+viszi init . --force         # overwrite an existing file
+```
+
+The emitted `.viszi.json` documents every supported field as a commented example. Uncomment what you need; an empty `{}` is also a valid config.

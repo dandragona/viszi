@@ -1,0 +1,77 @@
+name: Bug report
+description: Report something viszi does wrong
+title: '[bug]: '
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. Please include enough detail that we can reproduce it.
+
+  - type: input
+    id: viszi-version
+    attributes:
+      label: viszi version
+      description: Output of `viszi -V` (or `npx viszi -V`)
+      placeholder: 0.2.0
+    validations:
+      required: true
+
+  - type: input
+    id: node-version
+    attributes:
+      label: Node version
+      description: Output of `node -v`
+      placeholder: v20.18.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Linux
+        - Windows
+        - Other (please describe in the repro)
+    validations:
+      required: true
+
+  - type: textarea
+    id: command
+    attributes:
+      label: The exact viszi command you ran
+      placeholder: viszi ./my-repo --levels 3
+      render: bash
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected to happen
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What actually happened
+      description: Include stderr output if relevant. Paste, do not screenshot, text.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: A public repo URL, or a tiny repo we can clone. If the bug only repros against private code, describe the shape (number of files, languages, frameworks).
+
+  - type: checkboxes
+    id: dryrun
+    attributes:
+      label: Sanity checks
+      options:
+        - label: I tried `--dry-run` and the issue also reproduces (or this is an AI-output bug that only appears with real Claude calls)
+        - label: I'm running on a supported Node major (≥ 20)

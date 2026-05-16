@@ -1,9 +1,30 @@
 {
   "name": "viszi",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "AI-powered multi-tiered interactive system & flow diagrams for any codebase. Uses your local Claude Code CLI for inference.",
   "license": "MIT",
   "author": "Daniel Mandragona <danielmandragona@gmail.com>",
+  "homepage": "https://github.com/dandragona/viszi#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dandragona/viszi.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dandragona/viszi/issues"
+  },
+  "keywords": [
+    "codebase",
+    "architecture",
+    "diagram",
+    "visualization",
+    "claude",
+    "ai",
+    "system-diagram",
+    "flow-diagram"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "bin": {
     "viszi": "./bin/viszi.js"
@@ -13,7 +34,8 @@
     "dist",
     "grammars",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "engines": {
     "node": ">=20"
@@ -26,6 +48,11 @@
     "dev:cli": "tsc -p tsconfig.cli.json --watch",
     "clean": "rm -rf dist .viszi *.tsbuildinfo",
     "typecheck": "tsc -p tsconfig.cli.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css,json}\" \"docs/**/*.md\" \"*.md\" \"*.json\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,css,json}\" \"docs/**/*.md\" \"*.md\" \"*.json\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "smoke": "node bin/viszi.js --help"
   },
   "dependencies": {
@@ -50,14 +77,21 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@types/ws": "^8.18.1",
+    "@typescript-eslint/eslint-plugin": "^8.13.0",
+    "@typescript-eslint/parser": "^8.13.0",
     "@vitejs/plugin-react": "^4.3.3",
+    "ajv": "^8.20.0",
     "elkjs": "^0.9.3",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^9.1.0",
     "lucide-react": "^0.460.0",
+    "prettier": "^3.3.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0",
     "reactflow": "^11.11.4",
     "typescript": "^5.6.3",
-    "vite": "^5.4.10"
+    "vite": "^5.4.10",
+    "vitest": "^2.1.4"
   }
 }

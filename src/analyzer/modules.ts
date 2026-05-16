@@ -26,7 +26,7 @@ const TOP_LEVEL_PASSTHROUGH = new Set(['src', 'lib', 'app', 'internal', 'pkg', '
 function moduleIdFor(rel: string, scopePrefix?: string): string {
   let path = rel;
   if (scopePrefix && path.startsWith(scopePrefix)) {
-    path = path.slice(scopePrefix.length).replace(/^[\/\\]+/, '');
+    path = path.slice(scopePrefix.length).replace(/^[/\\]+/, '');
   }
   const parts = path.split(sep).filter(Boolean);
   if (parts.length === 0) return '__root__';

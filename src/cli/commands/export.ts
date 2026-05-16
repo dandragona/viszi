@@ -99,12 +99,14 @@ export async function runExportCommand(args: ExportArgs): Promise<number> {
 /**
  * JSON-encode for embedding in a <script> tag.
  * Escape `</` so a stray `</script` inside string values can't terminate the tag.
+ * Exported for unit tests.
  */
-function jsonForScript(value: unknown): string {
+export function jsonForScript(value: unknown): string {
   return JSON.stringify(value).replace(/<\/(script|style)/gi, '<\\/$1');
 }
 
-function escapeHtml(s: string): string {
+/** Escape user-controlled text for HTML attribute / text contexts. Exported for unit tests. */
+export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')

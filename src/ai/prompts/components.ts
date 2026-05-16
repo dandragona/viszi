@@ -1,4 +1,4 @@
-import type { Module } from '../../analyzer/modules.js';
+import type { modulesForPrompt } from '../../analyzer/modules.js';
 
 export interface ComponentsPromptInput {
   scope: string;
@@ -10,8 +10,6 @@ export interface ComponentsPromptInput {
   graphSummary: { files: number; loc: number; edges: number };
   hint?: string;
 }
-
-import { modulesForPrompt } from '../../analyzer/modules.js';
 
 export function buildComponentsPrompt(input: ComponentsPromptInput): string {
   const {

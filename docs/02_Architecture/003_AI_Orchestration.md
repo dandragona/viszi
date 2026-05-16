@@ -73,9 +73,23 @@ Useful for offline iteration on the frontend, for previewing output structure be
 | `--bare` | per-call | Skips the user's hooks/MCP/CLAUDE.md to keep behaviour predictable |
 | `--levels` | per-run | The dominant lever; level=1 is one call per scope, level=3 fans out fast |
 
+## Interruption (SIGINT)
+
+`src/ai/claude.ts` tracks every in-flight `claude` subprocess in a module-level `Set`. The CLI installs a `SIGINT` (and `SIGTERM`) handler in `src/cli/commands/analyze.ts` that:
+
+1. Calls `terminateInflightClaude('SIGTERM')` to propagate termination to every running `claude` child.
+2. Publishes an `error: 'Interrupted by user (SIGINT).'` event on the bus so any connected WebSocket clients see the abort.
+3. `await server?.close()` flushes Fastify cleanly.
+4. Exits with code `130` (POSIX convention for SIGINT).
+
+A second Ctrl-C inside the cleanup window bypasses the await and exits immediately.
+
+Cache entries are persisted by `AiCache.set()` after each individual call completes, so an interrupted run resumes from where it stopped — no partial-state mop-up is needed.
+
+`execa` is invoked with `cleanup: true` (its default, made explicit) so the OS cleans up any child that survives the SIGTERM if the parent then dies.
+
 ## Open issues / future work
 
 - A `--total-budget-usd` global cap that aborts the run.
 - A planner pass that estimates total spend before any Claude call (helps users tune `--levels`).
-- Streaming progress events to the frontend over WebSocket so the user can watch generation live.
 - Tree-sitter parsing for higher-fidelity inputs.

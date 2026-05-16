@@ -3,6 +3,7 @@ import { runAnalyzeCommand } from './commands/analyze.js';
 import { runServeCommand } from './commands/serve.js';
 import { runClearCommand } from './commands/clear.js';
 import { runExportCommand } from './commands/export.js';
+import { runInitCommand } from './commands/init.js';
 import { viszVersion } from '../shared/version.js';
 import { k } from './logger.js';
 
@@ -110,6 +111,25 @@ program
   });
 
 program
+  .command('init')
+  .description('Write a starter .viszi.json (and optional .viszi-ignore) to a path')
+  .argument('[path]', 'Directory to write the config into', '.')
+  .option('--force', 'Overwrite an existing .viszi.json / .viszi-ignore')
+  .option('--with-ignore', 'Also write a .viszi-ignore template alongside the config')
+  .option('-v, --verbose', 'Verbose logging')
+  .option('-q, --quiet', 'Errors only')
+  .action(async (path: string, opts: Record<string, unknown>) => {
+    const code = await runInitCommand({
+      path,
+      force: !!opts.force,
+      withIgnore: !!opts.withIgnore,
+      verbose: !!opts.verbose,
+      quiet: !!opts.quiet,
+    });
+    process.exit(code);
+  });
+
+program
   .command('export')
   .description('Export an existing analysis to a single self-contained HTML file')
   .argument('[path]', 'Path whose analysis should be exported', '.')
@@ -136,6 +156,7 @@ program.addHelpText(
   ${k.cyan('viszi . --no-flows')}           Skip flow diagrams
   ${k.cyan('viszi . --dry-run')}            Generate stub diagrams without calling Claude
   ${k.cyan('viszi serve .')}                Re-open an existing analysis
+  ${k.cyan('viszi init .')}                 Write a starter .viszi.json with every field documented
 `,
 );
 

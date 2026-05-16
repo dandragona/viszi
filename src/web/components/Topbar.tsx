@@ -3,6 +3,7 @@ import { useEffect, useMemo } from 'react';
 import type { Location } from 'react-router-dom';
 import type { DiagramIndex } from '../../model/types.js';
 import { Breadcrumbs } from './Breadcrumbs';
+import { Legend } from './Legend';
 
 export function Topbar(props: { index: DiagramIndex; location: Location }) {
   const { index, location } = props;
@@ -65,6 +66,7 @@ export function Topbar(props: { index: DiagramIndex; location: Location }) {
       </button>
       <Breadcrumbs index={index} currentId={currentId} />
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <Legend />
         <span style={{ fontSize: 11, color: 'var(--fg-3)' }}>
           {index.diagrams.length} diagrams · {index.meta.aiCallCount} AI calls
         </span>

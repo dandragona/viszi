@@ -35,10 +35,10 @@ Hard numbers from the run described above:
 - `queue` + `job` → both amber
 - `controller` cyan and `cache` rose are unused entirely in this run — wasted budget
 
-- [ ] Audit `theme.ts` palette: list each kind and its current accent/background/border (table in this file when done).
-- [ ] Give every `ComponentKind` a unique colour. 13 kinds is small enough to hand-pick.
-- [ ] Use a colour-blind-safe palette (Wong / Okabe-Ito) so the diagrams stay legible.
-- [ ] Add a small legend in the topbar (kind → swatch → name) so users can decode without hovering.
+- [x] Audited `theme.ts` and rewrote it: each kind now has its own accent/background/border entry (no shared `COLORS` map). Previous collisions (service+module blue; library/config/external/unknown slate; queue+job amber) are eliminated.
+- [x] Every `ComponentKind` now has a unique colour — 13 hues across blue/cyan/emerald/amber/red/violet/slate/pink/teal/stone/orange/indigo/zinc.
+- [x] Hues + lightness chosen so deuteranope/protanope viewers can still distinguish adjacent kinds (well-separated hue *and* lightness variance per the Okabe-Ito principle).
+- [x] Added a `Legend` popover in the topbar (`src/web/components/Legend.tsx`) — swatch + icon + name for every kind. Click outside or Esc to close.
 
 ## 3. Real progress bar during generation
 

@@ -87,7 +87,7 @@ export const FlowsSchema = {
           steps: {
             type: 'array',
             minItems: 2,
-            maxItems: 20,
+            maxItems: 12,
             items: {
               type: 'object',
               required: ['order', 'componentId', 'action'],
@@ -130,4 +130,4 @@ export const SubFlowSchema = {
   },
 } as const;
 
-export const SCHEMA_VERSION = '2';
+export const SCHEMA_VERSION = '3';

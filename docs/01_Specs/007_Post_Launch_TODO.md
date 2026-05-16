@@ -113,9 +113,9 @@ Hard numbers from the run described above:
 
 **Gap:** several flow steps from real runs are just `"Initialize X storage"`, `"Run main pipeline stages"` — they describe the component, not a discrete step in the flow. The flow becomes a re-labelling of the component diagram rather than an actual sequence-of-events view.
 
-- [ ] Tighten the flow prompt (`src/ai/prompts/flows.ts`) to demand verb-led, single-responsibility actions ("validates X", "writes Y to Z") rather than component-shaped phrases.
-- [ ] Reject (or merge) consecutive steps that share `componentId` *and* whose actions are too similar — likely Claude padding step count.
-- [ ] Cap step count at the AI level: `steps` schema currently allows up to 20; consider dropping to 12 to force terser flows.
+- [x] Tightened `src/ai/prompts/flows.ts`: added an explicit "Step-quality rules" section with GOOD / BAD example labels, banned padding (count must match real steps), and demanded that consecutive same-componentId steps be genuinely distinct. Reduced step ranges from "4-12" to "3-10" (L1) / "3-8" (L2+).
+- [x] Defensive merge of consecutive same-componentId steps whose actions are too similar (token-set Jaccard ≥ 0.7 OR strict subset). Lives in `mergeConsecutiveSimilarSteps` (`src/ai/orchestrator.ts`) and runs inside `buildFlowDiagram` before assembling step ids, so cached pre-prompt-tightening responses also get cleaned up on read. Tests in `tests/ai/merge-similar-steps.test.ts`.
+- [x] Step-count cap: `FlowsSchema.steps.maxItems` 20 → 12 (`src/ai/schemas.ts`). `SCHEMA_VERSION` bumped 2 → 3 so cached pre-tightening responses are re-fetched.
 
 ## 11. L1 is uninformative for single-package repos (`--root-scope`)
 

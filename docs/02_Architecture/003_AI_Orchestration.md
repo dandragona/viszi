@@ -45,6 +45,11 @@ Prompts include the deterministic module/component summary as JSON inside the pr
 
 `analyzeFlowsTier` builds the level-1 flow diagram set, then drills into the first 3 steps of each flow as sub-flows. The "first 3" cap is a deliberate cost-control — drilling into every step would explode AI usage at higher levels.
 
+After Claude returns, `buildFlowDiagram` runs two cleanup passes before the diagram is written:
+
+- **`mergeConsecutiveSimilarSteps`** — merges consecutive steps that share a `componentId` and whose actions are functionally the same (token-set Jaccard ≥ 0.7 OR strict subset). Defensive: the flow prompt already forbids step-count padding, but stale cache entries from before SCHEMA_VERSION 3 may still contain padding.
+- **`computeMonoComponent`** — tags the diagram with `meta.monoComponent` when ≥ `flows.monoComponentThreshold` (default 0.8) of steps share one componentId. The UI dims these in the sidebar; see ADR-013.
+
 ### Cross-tier parallelism
 
 `analyzeSystemTier` exposes an `onSystemAdded(diagram)` hook that fires immediately after each diagram is written. `runAnalysis` uses this hook on the L1 root to kick off `analyzeFlowsTier` as a separate promise — the two then run concurrently:

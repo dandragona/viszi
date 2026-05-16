@@ -824,10 +824,17 @@ function buildFlowDiagram(args: {
 
   const componentIds = new Set(components.map((c) => c.id));
   const sortedSteps = [...flow.steps].sort((a, b) => a.order - b.order);
-  const steps: FlowStep[] = sortedSteps.map((s, i) => ({
+  const merged = mergeConsecutiveSimilarSteps(
+    sortedSteps.map((s) => ({
+      componentId: componentIds.has(s.componentId) ? s.componentId : components[0]?.id ?? 'unknown',
+      action: s.action,
+      description: s.description,
+    })),
+  );
+  const steps: FlowStep[] = merged.map((s, i) => ({
     id: `${id}.s${i + 1}`,
     order: i + 1,
-    componentId: componentIds.has(s.componentId) ? s.componentId : components[0]?.id ?? 'unknown',
+    componentId: s.componentId,
     action: s.action,
     description: s.description,
   }));
@@ -875,6 +882,80 @@ function buildFlowDiagram(args: {
   const mono = computeMonoComponent(steps, components, args.monoComponentThreshold);
   if (mono) diagram.meta = { ...diagram.meta, monoComponent: mono };
   return diagram;
+}
+
+/**
+ * #10 in 007_Post_Launch_TODO: merge consecutive steps that share the same
+ * componentId AND whose actions are close enough to be the same step said
+ * twice. Claude tends to pad step count this way; the prompt now forbids it,
+ * but defensive merging keeps stale cache entries (pre-SCHEMA_VERSION bump)
+ * honest and stops a regression from making the diagrams noisy.
+ *
+ * "Close enough" is conservative: token-set Jaccard similarity ≥ 0.7 on the
+ * lowercased actions, OR one action's tokens are a strict subset of the
+ * other's. Keeps the longer, more informative action; merges descriptions.
+ *
+ * Pure function — exported for unit tests.
+ */
+export function mergeConsecutiveSimilarSteps<
+  S extends { componentId: string; action: string; description?: string },
+>(steps: S[]): S[] {
+  if (steps.length < 2) return steps.slice();
+  const out: S[] = [];
+  for (const s of steps) {
+    const prev = out[out.length - 1];
+    if (!prev || prev.componentId !== s.componentId) {
+      out.push({ ...s });
+      continue;
+    }
+    if (!actionsAreSimilar(prev.action, s.action)) {
+      out.push({ ...s });
+      continue;
+    }
+    // Merge: keep the longer of the two actions; concatenate descriptions if both exist.
+    const keepCurrent = s.action.length > prev.action.length;
+    const mergedDesc =
+      prev.description && s.description && prev.description !== s.description
+        ? `${prev.description}; ${s.description}`
+        : prev.description ?? s.description;
+    out[out.length - 1] = {
+      ...prev,
+      action: keepCurrent ? s.action : prev.action,
+      description: mergedDesc,
+    } as S;
+  }
+  return out;
+}
+
+function actionsAreSimilar(a: string, b: string): boolean {
+  if (a === b) return true;
+  const ta = tokenize(a);
+  const tb = tokenize(b);
+  if (ta.size === 0 || tb.size === 0) return false;
+  // Strict subset → effectively the same step.
+  if (isSubset(ta, tb) || isSubset(tb, ta)) return true;
+  // Jaccard similarity ≥ 0.7.
+  let inter = 0;
+  for (const t of ta) if (tb.has(t)) inter++;
+  const union = ta.size + tb.size - inter;
+  return inter / union >= 0.7;
+}
+
+function tokenize(s: string): Set<string> {
+  const stop = new Set(['the', 'a', 'an', 'to', 'of', 'and', 'in', 'on', 'for', 'with', 'as']);
+  return new Set(
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .split(/\s+/)
+      .filter((t) => t.length > 1 && !stop.has(t)),
+  );
+}
+
+function isSubset<T>(a: Set<T>, b: Set<T>): boolean {
+  if (a.size > b.size) return false;
+  for (const x of a) if (!b.has(x)) return false;
+  return true;
 }
 
 /**

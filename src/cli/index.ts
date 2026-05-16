@@ -1,3 +1,4 @@
+import { cpus } from 'node:os';
 import { Command, Option } from 'commander';
 import { runAnalyzeCommand } from './commands/analyze.js';
 import { runServeCommand } from './commands/serve.js';
@@ -6,6 +7,16 @@ import { runExportCommand } from './commands/export.js';
 import { runInitCommand } from './commands/init.js';
 import { viszVersion } from '../shared/version.js';
 import { k } from './logger.js';
+
+/**
+ * Adaptive default for `--concurrency`. Claude calls are network-bound so we
+ * can comfortably outrun the CPU count, but going wider than 8 mostly trades
+ * extra rate-limit headroom for diminishing returns. Floor at 4 keeps small
+ * machines (CI runners with 2 vCPUs) usefully parallel.
+ */
+function defaultConcurrency(): number {
+  return Math.min(8, Math.max(4, cpus().length));
+}
 
 function parseIntStrict(name: string) {
   return (raw: string) => {
@@ -48,7 +59,12 @@ program
   .option('--port <n>', 'Server port (default: auto)', parseIntStrict('port'))
   .option('--no-open', "Don't auto-open the browser")
   .option('--no-serve', 'Generate only — do not start the server')
-  .option('--concurrency <n>', 'Parallel Claude calls', parseIntStrict('concurrency'), 4)
+  .option(
+    '--concurrency <n>',
+    'Parallel Claude calls within a tier. Claude requests are network-bound, so 6-12 is usually fine. Default is adaptive (`min(8, max(4, cpus))`). Cross-tier work (the L1 flow tier + L2 system fanout) already overlaps, so effective parallelism can briefly hit 2× this value.',
+    parseIntStrict('concurrency'),
+    defaultConcurrency(),
+  )
   .option(
     '--max-budget-usd <amount>',
     'Per-call USD budget cap (default: unbounded — passes nothing to `claude --max-budget-usd`)',

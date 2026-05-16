@@ -247,7 +247,11 @@ export async function runAnalysis(opts: OrchestratorOpts): Promise<RunResult> {
   const fullEntrypoints = detectEntrypoints({ repoRoot: opts.repoRoot, parsed });
 
   // ─── Stage B: recursive level loop ──────────────────────────────────────
+  // Cross-tier parallelism: as soon as the L1 root system is written, kick
+  // off the L1 flow tier in parallel with the L2+ system fanout. The two
+  // are independent — flows only needs the L1 component list.
   const rootSystemId = systemDiagramId(rootScope);
+  let flowsPromise: Promise<void> | undefined;
   await analyzeSystemTier({
     scope: rootScope,
     level: 1,
@@ -259,11 +263,8 @@ export async function runAnalysis(opts: OrchestratorOpts): Promise<RunResult> {
     writer,
     cache,
     progress,
-  });
-
-  {
-    const rootSystem = writer.get(rootSystemId);
-    if (rootSystem && rootSystem.kind === 'system') {
+    onSystemAdded: (rootSystem) => {
+      if (rootSystem.level !== 1) return;
       // Refine the plan once we know the actual L1 component count.
       const refined = estimateAiCalls(rootSystem.nodes.length, opts.levels, opts.flowsEnabled);
       if (refined !== planState.aiCallTotal) {
@@ -279,28 +280,26 @@ export async function runAnalysis(opts: OrchestratorOpts): Promise<RunResult> {
         });
       }
       maybeSuggestRootScope(rootSystem, opts, rootScope, progress);
-    }
-  }
+      if (opts.flowsEnabled && !flowsPromise) {
+        flowsPromise = analyzeFlowsTier({
+          scope: rootScope,
+          level: 1,
+          parentId: undefined,
+          parentFlowName: undefined,
+          parentStepAction: undefined,
+          components: rootSystem.nodes,
+          entrypoints: fullEntrypoints,
+          graphSummary: summarize(fullGraph),
+          opts,
+          writer,
+          cache,
+          progress,
+        });
+      }
+    },
+  });
 
-  if (opts.flowsEnabled) {
-    const rootSystem = writer.get(rootSystemId);
-    if (rootSystem && rootSystem.kind === 'system') {
-      await analyzeFlowsTier({
-        scope: rootScope,
-        level: 1,
-        parentId: undefined,
-        parentFlowName: undefined,
-        parentStepAction: undefined,
-        components: rootSystem.nodes,
-        entrypoints: fullEntrypoints,
-        graphSummary: summarize(fullGraph),
-        opts,
-        writer,
-        cache,
-        progress,
-      });
-    }
-  }
+  if (flowsPromise) await flowsPromise;
 
   const index = writer.flush(rootSystemId);
   progress({ phase: 'write', diagrams: index.diagrams.length });
@@ -330,6 +329,12 @@ interface SystemTierArgs {
   writer: DiagramWriter;
   cache: AiCache;
   progress: (e: ProgressEvent) => void;
+  /**
+   * Fired after each system diagram is written. The caller can use this to
+   * start dependent work (e.g. the L1 flow tier) in parallel with the
+   * recursive sub-system fanout.
+   */
+  onSystemAdded?: (diagram: SystemDiagram) => void;
 }
 
 async function analyzeSystemTier(args: SystemTierArgs): Promise<SystemDiagram | undefined> {
@@ -403,6 +408,7 @@ async function analyzeSystemTier(args: SystemTierArgs): Promise<SystemDiagram | 
     titleOverride: args.titleOverride,
   });
   writer.add(diagram);
+  args.onSystemAdded?.(diagram);
 
   // Recurse: build a sub-diagram for each component if not at max depth.
   if (level < opts.levels) {

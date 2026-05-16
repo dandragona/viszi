@@ -36,14 +36,31 @@ Prompts include the deterministic module/component summary as JSON inside the pr
 
 ## Recursion (BFS)
 
-`runAnalysis()` is a single entry point that does three things in order:
+`runAnalysis()` is a single entry point that does three things:
 1. Walk + parse the whole repo once.
 2. Recurse `analyzeSystemTier` for the system diagram tree.
-3. (Optional) Recurse `analyzeFlowsTier` for the flow diagram tree.
+3. (Optional) `analyzeFlowsTier` for the flow diagram tree — kicked off in **parallel** with step 2's L2+ fanout as soon as the L1 root system is written (see "Cross-tier parallelism" below).
 
 `analyzeSystemTier` builds a level-N system diagram for a given scope, then for each component with `level < opts.levels` enqueues a child tier covering only that component's files. Sibling components at the same level are processed in parallel batches of `--concurrency`.
 
 `analyzeFlowsTier` builds the level-1 flow diagram set, then drills into the first 3 steps of each flow as sub-flows. The "first 3" cap is a deliberate cost-control — drilling into every step would explode AI usage at higher levels.
+
+### Cross-tier parallelism
+
+`analyzeSystemTier` exposes an `onSystemAdded(diagram)` hook that fires immediately after each diagram is written. `runAnalysis` uses this hook on the L1 root to kick off `analyzeFlowsTier` as a separate promise — the two then run concurrently:
+
+```
+T0  ─ L1 system call ────────┐
+T1  ┌─ L2 system fanout      │ (Promise.all batched at --concurrency)
+T1  └─ L1 flows + sub-flows  │ (Promise.all batched at --concurrency)
+TN  ─ await both ────────────┘
+```
+
+Effective parallelism inside a single tier is bounded by `--concurrency`; during the overlap window the active in-flight Claude calls can briefly hit 2× that value. The hook only fires for the L1 root because that's the only "ready" signal `analyzeFlowsTier` actually needs.
+
+### Concurrency tuning
+
+`--concurrency` defaults to `min(8, max(4, os.cpus().length))` — adaptive enough that a 2-vCPU CI runner still parallelises 4 at a time, while a 16-core dev box caps at 8 (above which Anthropic rate limits start dominating). The flag is per-tier; cross-tier overlap is implicit.
 
 ## Caching (`cache.ts`)
 

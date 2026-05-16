@@ -116,6 +116,18 @@ Each entry follows: **Decision · Context · Why · Consequences**.
 
 ---
 
+## ADR-012: Cross-tier parallelism between system and flow analysis (2026-05)
+
+**Decision**: `analyzeSystemTier` exposes an `onSystemAdded(diagram)` callback fired immediately after each system diagram is written. `runAnalysis` uses it on the L1 root system to kick off `analyzeFlowsTier` as an unawaited promise; the two then run concurrently and are joined once at the end.
+
+**Context**: Previously `runAnalysis` did `await analyzeSystemTier(...)` (which itself synchronously recursed L2 → L3 → …) and *then* checked `flowsEnabled`. On a 3-L2 / 7-L1-flow shape at `concurrency=4` that meant two large serialised batches — even though the L1 flow tier depends only on the L1 root, not on any L2 result.
+
+**Why**: The dependency graph is the source of truth: L1 flows need the L1 root nodes list, nothing more. Adding a single-arg hook is the smallest change that lets the caller act on that ready signal without restructuring the recursion. The default-concurrency tweak (`min(8, max(4, cpus))`) complements this — both tiers can sustain higher in-flight counts during the overlap window.
+
+**Consequences**: Wall-time drops noticeably on repos with both an L2 system fanout *and* multiple L1 flows. Peak in-flight Claude calls can briefly hit `2 × --concurrency` during overlap; users running close to Anthropic rate limits should lower the flag explicitly. The hook is otherwise inert (only the L1 callback path uses it), so non-flows runs are unaffected.
+
+---
+
 ## ADR-011: Adaptive module clustering depth + member-id fallback (2026-05)
 
 **Decision**: `clusterIntoModules` does a two-pass clustering: first count files per coarse module id, then descend one segment deeper for any module that would exceed `FILES_PER_MODULE_LIMIT` (= 25) files. Additionally, the AI orchestrator's `resolveMemberFiles` accepts a `member` id that doesn't match a module id exactly: it falls back to prefix-matching in either direction (Claude refined further; Claude returned a coarser id).

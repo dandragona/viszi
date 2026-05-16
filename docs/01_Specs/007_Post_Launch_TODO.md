@@ -55,10 +55,10 @@ Hard numbers from the run described above:
 
 **Gap:** the user perceived a 26-call level-2 run as serial. In fact `analyzeSystemTier` and `analyzeFlowsTier` *do* batch siblings with `Promise.all(...batch)` bounded by `--concurrency` (default `4`). Two possible improvements:
 
-- [ ] Document the existing parallelism in `--help` so users discover `--concurrency 8` (or higher) without reading source.
-- [ ] Make the default concurrency adaptive — e.g. `Math.min(8, os.cpus().length)`. The current default of 4 is conservative for a network-bound workload.
-- [ ] **Cross-tier parallelism** (concrete win): today `analyzeFlowsTier` waits for *all* system tiers to finish (`runAnalysis` does `await analyzeSystemTier(...)` before even checking `flowsEnabled`). Once the level-1 root system diagram is ready, the level-1 flows call only depends on *that one diagram* — kick it off in parallel with the level-2 system fanout. On a 3-L2-system / 7-L1-flow shape at `concurrency=4`, this overlaps two big batches and probably halves wall time.
-- [ ] Investigate batching multiple level-N system calls into one Claude prompt where the scopes are tiny (e.g. components with ≤ 3 files) — would halve cold-start cost on small projects.
+- [x] Help text for `--concurrency` now explicitly notes the network-bound nature, the adaptive default formula, and the cross-tier 2× peak; CLI spec table updated; ADR-012 added to the decision log.
+- [x] Default concurrency is now adaptive — `Math.min(8, Math.max(4, os.cpus().length))` in `src/cli/index.ts:defaultConcurrency`. Floor at 4 keeps small CI runners parallel; cap at 8 stops rate-limit pressure.
+- [x] **Cross-tier parallelism** landed. `analyzeSystemTier` gained an `onSystemAdded(diagram)` hook; `runAnalysis` uses it on the L1 root to start `analyzeFlowsTier` as a separate promise, then awaits it after the system fanout finishes. See ADR-012.
+- [ ] Investigate batching multiple level-N system calls into one Claude prompt where the scopes are tiny — out-of-scope for this round; would need a new schema and a different cache strategy.
 
 ## 5. Sidebar redesign — expand/collapse tree
 

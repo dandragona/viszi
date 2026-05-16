@@ -16,7 +16,7 @@ Analyse a codebase and serve interactive diagrams.
 | `--port <n>` | auto | HTTP server port |
 | `--no-open` | open | Don't auto-open the browser |
 | `--no-serve` | serve | Generate diagrams only — don't start the server |
-| `--concurrency <n>` | `4` | Parallel `claude` subprocess calls |
+| `--concurrency <n>` | adaptive (`min(8, max(4, cpus))`) | Parallel `claude` subprocess calls within a tier. Cross-tier overlap (L1 flows in parallel with L2 system fanout) can briefly bring effective concurrency to 2×. |
 | `--max-budget-usd <n>` | unbounded | Per-call USD budget cap; omitted by default so `claude` runs with no per-call cap. Pass a number (e.g. `0.5`) to forward `--max-budget-usd` to `claude`. |
 | `--no-cache` | cache on | Disable on-disk response cache |
 | `--dry-run` | off | Skip Claude entirely; emit synthetic stub diagrams. Useful for offline dev or estimating output structure |

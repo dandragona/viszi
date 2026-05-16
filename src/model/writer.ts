@@ -24,14 +24,17 @@ export interface SearchEntryFile {
   diagramId: string;
   anchor?: string;
   kind: 'diagram' | 'component' | 'flow-step';
-  diagramKind: DiagramKind;
-  diagramTitle: string;
-  diagramLevel: number;
   label: string;
   description?: string;
   componentKind?: ComponentKind;
   files?: string[];
   haystack: string;
+}
+
+export interface SearchIndexFile {
+  /** Per-diagram constants — interned to keep `search.json` small. */
+  diagrams: Record<string, { title: string; kind: DiagramKind; level: number }>;
+  entries: SearchEntryFile[];
 }
 
 export interface WriterOpts {
@@ -84,7 +87,8 @@ export class DiagramWriter {
   flush(rootSystemId: string): DiagramIndex {
     const entries: DiagramIndexEntry[] = [];
     const flows: { id: string; title: string; trigger: FlowTrigger }[] = [];
-    const search: SearchEntryFile[] = [];
+    const searchEntries: SearchEntryFile[] = [];
+    const searchDiagrams: SearchIndexFile['diagrams'] = {};
 
     for (const d of this.diagrams.values()) {
       const file = resolve(diagramsSubdir(this.opts.outputDir), `${sanitizeId(d.id)}.json`);
@@ -99,8 +103,10 @@ export class DiagramWriter {
       if (d.kind === 'flow' && d.level === 1) {
         flows.push({ id: d.id, title: d.title, trigger: (d as FlowDiagram).trigger });
       }
-      collectSearchEntries(d, search);
+      searchDiagrams[d.id] = { title: d.title, kind: d.kind, level: d.level };
+      collectSearchEntries(d, searchEntries);
     }
+    const search: SearchIndexFile = { diagrams: searchDiagrams, entries: searchEntries };
 
     const index: DiagramIndex = {
       version: viszVersion(),
@@ -155,9 +161,6 @@ function collectSearchEntries(d: AnyDiagram, out: SearchEntryFile[]) {
   out.push({
     diagramId: d.id,
     kind: 'diagram',
-    diagramKind: d.kind,
-    diagramTitle: d.title,
-    diagramLevel: d.level,
     label: d.title,
     description: d.description,
     haystack: makeHaystack([d.title, d.description, d.kind, `level ${d.level}`]),
@@ -168,9 +171,6 @@ function collectSearchEntries(d: AnyDiagram, out: SearchEntryFile[]) {
       diagramId: d.id,
       anchor: n.id,
       kind: d.kind === 'flow' ? 'flow-step' : 'component',
-      diagramKind: d.kind,
-      diagramTitle: d.title,
-      diagramLevel: d.level,
       label: n.label,
       description: n.description,
       componentKind: n.kind,

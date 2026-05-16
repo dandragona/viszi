@@ -1,9 +1,12 @@
 import type { ComponentKind, DiagramKind } from '../model/types.js';
 
+/**
+ * The shape we materialise on the client *after* loading search.json and
+ * joining each entry's diagramId against the deduped `diagrams` map.
+ * Down-stream code (the palette + ranker) keeps working on the flat shape.
+ */
 export interface SearchEntry {
-  /** Where to navigate when this entry is picked. */
   diagramId: string;
-  /** Optional anchor inside the diagram (a node id). */
   anchor?: string;
   kind: 'diagram' | 'component' | 'flow-step';
   diagramKind: DiagramKind;
@@ -13,8 +16,52 @@ export interface SearchEntry {
   description?: string;
   componentKind?: ComponentKind;
   files?: string[];
-  /** Pre-lowered haystack used for matching. */
   haystack: string;
+}
+
+/** On-disk shape of `search.json` after the interning rewrite. */
+export interface SearchIndexFile {
+  diagrams: Record<string, { title: string; kind: DiagramKind; level: number }>;
+  entries: SearchEntryRaw[];
+}
+
+export interface SearchEntryRaw {
+  diagramId: string;
+  anchor?: string;
+  kind: 'diagram' | 'component' | 'flow-step';
+  label: string;
+  description?: string;
+  componentKind?: ComponentKind;
+  files?: string[];
+  haystack: string;
+}
+
+/**
+ * Join the deduped on-disk shape back into the flat `SearchEntry` shape the
+ * ranker expects. Accepts the legacy flat-array shape too so prior caches
+ * remain readable.
+ */
+export function hydrateSearch(input: SearchIndexFile | SearchEntry[] | unknown): SearchEntry[] {
+  if (Array.isArray(input)) return input as SearchEntry[];
+  const obj = input as SearchIndexFile;
+  if (!obj || !obj.entries || !obj.diagrams) return [];
+  const diagrams = obj.diagrams;
+  return obj.entries.map((e) => {
+    const d = diagrams[e.diagramId] ?? { title: e.diagramId, kind: 'system' as DiagramKind, level: 1 };
+    return {
+      diagramId: e.diagramId,
+      anchor: e.anchor,
+      kind: e.kind,
+      diagramKind: d.kind,
+      diagramTitle: d.title,
+      diagramLevel: d.level,
+      label: e.label,
+      description: e.description,
+      componentKind: e.componentKind,
+      files: e.files,
+      haystack: e.haystack,
+    } satisfies SearchEntry;
+  });
 }
 
 export interface ScoredEntry {

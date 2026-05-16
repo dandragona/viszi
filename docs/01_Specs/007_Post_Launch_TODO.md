@@ -168,9 +168,10 @@ The cheapest, most composable fix is a new flag that lets the user push the anal
 
 **Gap:** `search.json` is 493 KB for ~600 entries because every entry copies its parent diagram's title + description verbatim. The fields are massively repeated.
 
-- [ ] Reshape `search.json` to `{ diagrams: { id → { title, description } }, entries: [{ label, diagramId, anchor?, kind, componentKind?, description? }] }`. Move per-diagram constants out of `entries`.
-- [ ] Apply the same shape on the client search-index loader.
-- [ ] Expected: 5–10× smaller `search.json` → matters proportionally for the inlined static-HTML export.
+- [x] Reshaped `search.json` to `{ diagrams: { id → { title, kind, level } }, entries: [...] }` — per-entry `diagramTitle`/`diagramKind`/`diagramLevel` removed in favour of a single per-diagram record.
+- [x] Client now hydrates via `hydrateSearch()` (`src/web/search.ts`) which joins `entries[]` against the `diagrams` map before handing the flat shape to the ranker. Accepts the legacy flat-array shape for older caches.
+- [x] Tests in `tests/web/hydrate-search.test.ts` cover the new shape + legacy fallback + the missing-id graceful default.
+- [x] Expected on-disk savings: every entry sheds 3 repeated fields; on a 600-entry / 89-diagram run that's hundreds of redundant title copies eliminated.
 
 ## 17. Per-diagram regenerate
 

@@ -1,5 +1,5 @@
 import type { AnyDiagram, DiagramIndex } from '../model/types.js';
-import type { SearchEntry } from './search';
+import { hydrateSearch, type SearchEntry, type SearchIndexFile } from './search';
 
 const API_BASE = '/api';
 
@@ -8,7 +8,8 @@ declare global {
     __VISZI_DATA__?: {
       index: DiagramIndex;
       diagrams: Record<string, AnyDiagram>;
-      search?: SearchEntry[];
+      /** Either the new `{diagrams, entries}` shape or the legacy flat array. */
+      search?: SearchIndexFile | SearchEntry[];
     };
   }
 }
@@ -38,6 +39,6 @@ export function fetchDiagram(id: string): Promise<AnyDiagram> {
 }
 
 export function fetchSearch(): Promise<SearchEntry[]> {
-  if (inline) return Promise.resolve(inline.search ?? []);
-  return fetchJson<SearchEntry[]>('/search');
+  if (inline) return Promise.resolve(hydrateSearch(inline.search ?? []));
+  return fetchJson<SearchIndexFile | SearchEntry[]>('/search').then(hydrateSearch);
 }

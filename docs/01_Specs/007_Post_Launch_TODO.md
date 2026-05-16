@@ -64,12 +64,12 @@ Hard numbers from the run described above:
 
 **Gap:** the sidebar (`src/web/components/Sidebar.tsx`) currently lists *every* diagram in three flat sections (System / Flows / All Diagrams). On the reference run that's 89 entries in the "All Diagrams" section alone, grouped only by level number — overwhelming and uninformative.
 
-- [ ] Build the hierarchy at write-time: `index.json` already has `parentId` on each diagram; derive a `children: string[]` map.
-- [ ] Render the sidebar as a tree: only the level-1 root system + level-1 flows are visible initially.
-- [ ] Each item with children gets a `▸` / `▾` chevron; clicking expands one level. Clicking the label itself navigates.
-- [ ] Persist expand/collapse state per-diagram-id in `localStorage` so refresh doesn't collapse everything.
-- [ ] Keep an "expand all" / "collapse all" affordance in the section header.
-- [ ] **Group flows by trigger.** The index already has `flows[i].trigger` (`http` / `cli` / `cron` / `event` / `init` / `other`). Split the Flows section into subgroups so the reference run's 4 cli + 2 http + 1 init flows aren't one undifferentiated wall.
+- [x] Derived the hierarchy client-side via a `buildChildrenMap()` from each entry's existing `parentId` — no schema change needed.
+- [x] Sidebar now renders as a tree: only the root system + each top-level flow are expanded on first visit; everything else is collapsed.
+- [x] Each item with children gets a `▸` / `▾` chevron; clicking it toggles. The label is a `NavLink` so clicking the label navigates.
+- [x] Expand/collapse state persisted to `localStorage` under `viszi.sidebar.expanded.v1` (JSON array of ids).
+- [x] Added "expand all" / "collapse all" buttons (`+` / `−`) in the System section head.
+- [x] **Flows grouped by trigger.** Split into subgroups in `TRIGGER_ORDER` (`http` / `cli` / `cron` / `event` / `init` / `other`) — empty groups are not rendered.
 
 ## 6. Visible back button
 

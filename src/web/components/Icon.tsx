@@ -1,4 +1,5 @@
 import {
+  ArrowUpRight,
   Box,
   Clock,
   Cpu,
@@ -33,6 +34,7 @@ const REGISTRY: Record<string, LucideIcon> = {
   'help-circle': HelpCircle,
   radio: Radio,
   power: Power,
+  'arrow-up-right': ArrowUpRight,
 };
 
 export function Icon({ name, size = 14, strokeWidth = 1.75 }: { name: string; size?: number; strokeWidth?: number }) {

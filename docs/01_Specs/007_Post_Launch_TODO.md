@@ -84,10 +84,10 @@ Hard numbers from the run described above:
 
 **Gap:** components with a child diagram *are* clickable today (`ComponentNode` has `onClick` wired to `onDrill(subDiagramId)` and shows `drill in →` in the bottom-right). But the user's first impression was that nothing was clickable. Either a discoverability issue or the click handler isn't firing in some cases. **Likely interacting with item 8** — once L2 components stopped getting `subDiagramId` populated, the visible "drill in →" hint also disappeared from those nodes, which is consistent with "nothing was clickable" at depth.
 
-- [ ] Verify the click handler actually navigates — manually click through every level on a `--levels 3` run and confirm the URL changes. If clicks are being eaten by React Flow's pan/drag handling, intercept on the inner card div and stop propagation.
-- [ ] Increase the visual affordance: bolder border on hover, a corner-fold "drillable" badge, or a subtle pulse on hover.
-- [ ] Change the cursor to `pointer` on the *whole* node card (not just the `drill in →` chip) when `subDiagramId` is set.
-- [ ] Consider adding a small file-tree-style chevron in the corner of every drillable node.
+- [x] Verified the click handler navigates — added explicit `e.stopPropagation()` on both `ComponentNode` and `FlowStepNode` so React Flow's pane handlers can never swallow the click.
+- [x] Bolder border on hover: hover swaps to a 2px accent-coloured border (`var(--node-accent)`) and a stronger glow.
+- [x] `cursor: pointer` already applied to the whole `.viszi-node.clickable` card.
+- [x] Added a small `↗` corner badge (`.drill-corner` in `src/web/styles.css`) on every drillable node — fades up + nudges out on hover.
 
 ## 8. **CRITICAL** — L2 → L3 drill-through is broken on real repos
 

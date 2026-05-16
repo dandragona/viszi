@@ -286,8 +286,29 @@ button.primary:hover {
 }
 .viszi-node.clickable:hover {
   transform: translateY(-1px);
-  box-shadow: 0 8px 24px -8px var(--node-glow, rgba(0,0,0,0.5));
-  border-color: var(--node-border, var(--border-strong));
+  box-shadow: 0 10px 26px -8px var(--node-glow, rgba(0,0,0,0.5));
+  border-color: var(--node-accent, var(--accent));
+  border-width: 2px;
+  padding: 11px 13px; /* compensate for +0.5px border to avoid layout shift */
+}
+.viszi-node .drill-corner {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  background: var(--node-bg, rgba(96,165,250,0.16));
+  color: var(--node-accent, var(--accent));
+  opacity: 0.55;
+  transition: opacity 0.15s, transform 0.15s;
+}
+.viszi-node.clickable:hover .drill-corner {
+  opacity: 1;
+  transform: translate(1px, -1px);
 }
 .viszi-node .node-header {
   display: flex;

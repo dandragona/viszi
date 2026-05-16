@@ -22,13 +22,26 @@ export function ComponentNode({ data }: { data: ComponentNodeData }) {
     ['--node-glow' as never]: style.glow,
   } as React.CSSProperties;
 
+  const onClick = (e: React.MouseEvent) => {
+    if (!data.subDiagramId) return;
+    // Stop React Flow's pane handlers from swallowing the click.
+    e.stopPropagation();
+    data.onDrill?.(data.subDiagramId);
+  };
+
   return (
     <div
       className={`viszi-node ${clickable ? 'clickable' : ''}`}
       style={{ ...cssVars, borderColor: style.border }}
-      onClick={() => data.subDiagramId && data.onDrill?.(data.subDiagramId)}
+      onClick={onClick}
+      title={clickable ? 'Click to drill into sub-diagram' : undefined}
     >
       <Handle type="target" position={Position.Left} />
+      {clickable && (
+        <span className="drill-corner" aria-hidden="true">
+          <Icon name="arrow-up-right" size={11} />
+        </span>
+      )}
       <div className="node-header">
         <span className="node-icon">
           <Icon name={style.icon} size={14} />

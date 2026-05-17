@@ -40,7 +40,7 @@ export function FlowStepNode({ data }: { data: FlowStepNodeData }) {
       onClick={onClick}
       title={clickable ? 'Click to drill into sub-flow' : undefined}
     >
-      <Handle type="target" position={Position.Left} />
+      <Handle type="target" position={Position.Top} />
       {data.onHide && nodeId && (
         <button
           type="button"
@@ -70,7 +70,7 @@ export function FlowStepNode({ data }: { data: FlowStepNodeData }) {
         </div>
       )}
       {data.description && <div className="node-desc" style={{ marginTop: 6 }}>{data.description}</div>}
-      <Handle type="source" position={Position.Right} />
+      <Handle type="source" position={Position.Bottom} />
     </div>
   );
 }

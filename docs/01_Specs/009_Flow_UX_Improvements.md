@@ -19,10 +19,10 @@ From the gimli run:
 
 **Gap:** flows render as a single horizontal pipe of step cards (`{number} {verb}` + tiny component pill below). On a 1600px viewport with a ~250px sidebar that gives each card ≤180px of width, so long step labels truncate ("dispatches trade-pipeline run…") and the trigger banner floats top-left disconnected from the steps. Worse, the cards don't visually convey *who* runs each step — only *what* — so the natural question "which component does the LLM call live in?" can only be answered by reading each card.
 
-- [ ] Flip `kind: 'flow'` diagrams to ELK `direction: 'DOWN'` (`src/web/components/DiagramCanvas.tsx:104`). Keep system diagrams `RIGHT`. Adjust `FlowStepNode` handle positions from `Left`/`Right` back to `Top`/`Bottom` (`src/web/components/nodes/FlowStepNode.tsx:43,73`) — yes, this partially reverses item 1 of 007, but only for flow kind; the reasons differ (item 007.1 was about *system* diagrams; with swim lanes flows want vertical scroll).
-- [ ] Group steps into vertical swim lanes by `componentId`. ELK's `layered` algorithm with `layering.strategy = INTERACTIVE` + a per-node `partitioning.partition` (one partition per componentId, ordered by first appearance) gives this nearly free. Lane headers at the top with the component icon + label.
-- [ ] When `meta.monoComponent.share === 1.0`, fall back to single-column "no lanes needed — all internal to X" layout with a banner instead of an empty swim-lane chart.
-- [ ] Verify edges crossing lanes are visually distinct (curved + dashed?) from edges within a lane — the cross-lane hops are the architecturally interesting ones.
+- [x] Flow diagrams now go top-to-bottom. ELK is bypassed for `kind: 'flow'` (manual swim-lane positioning is cleaner than fighting ELK partitioning, which groups nodes into the *same* layer rather than into adjacent columns). System diagrams still use ELK `direction: 'RIGHT'`. `FlowStepNode` handles flipped to `Top`/`Bottom`.
+- [x] Steps grouped into vertical swim lanes by `componentId` (first-appearance order). Lane headers across the top show component icon + label + step count.
+- [x] When there's only one unique `componentId` in the flow (mono-component, share===1.0 by definition), lanes are skipped — single column layout, no header. The existing "mostly internal to X" banner in `DiagramMeta` carries the explanation.
+- [x] Cross-lane edges (different `componentId` on source vs target) get a heavier dashed blue stroke (`rgba(96,165,250,0.95)`, dasharray 6/4) vs in-lane edges (lighter solid).
 
 ## 2. Trigger node, not floating banner
 

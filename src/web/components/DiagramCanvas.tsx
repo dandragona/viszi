@@ -9,9 +9,10 @@ import ReactFlow, {
   type Node,
   ReactFlowProvider,
 } from 'reactflow';
-import type { AnyDiagram, EdgeKind } from '../../model/types.js';
+import type { AnyDiagram, ComponentKind, EdgeKind } from '../../model/types.js';
 import { ComponentNode, type ComponentNodeData } from './nodes/ComponentNode';
 import { FlowStepNode, type FlowStepNodeData } from './nodes/FlowStepNode';
+import { LaneHeaderNode, type LaneHeaderNodeData } from './nodes/LaneHeaderNode';
 import { layoutWithElk } from '../layout/elk';
 import { Icon } from './Icon';
 import { TRIGGER_ICON } from '../theme';
@@ -48,9 +49,10 @@ const EDGE_STYLES: Record<EdgeKind, { stroke: string; strokeWidth: number; dasha
 const NODE_TYPES = {
   component: ComponentNode,
   flowStep: FlowStepNode,
+  laneHeader: LaneHeaderNode,
 };
 
-type NodeData = ComponentNodeData | FlowStepNodeData;
+type NodeData = ComponentNodeData | FlowStepNodeData | LaneHeaderNodeData;
 
 export function DiagramCanvas({ diagram }: { diagram: AnyDiagram }) {
   const navigate = useNavigate();
@@ -92,15 +94,22 @@ export function DiagramCanvas({ diagram }: { diagram: AnyDiagram }) {
     setFilesPanel(null);
   }, [diagram.id]);
 
-  const { initialNodes, edges } = useMemo(
+  const { initialNodes, edges, prepositioned } = useMemo(
     () => buildFlowElements(diagram, onDrill, onHide, onShowFiles, hidden),
     [diagram, onDrill, onHide, onShowFiles, hidden],
   );
 
   useEffect(() => {
     let cancelled = false;
-    // Flow diagrams read left-to-right like every other sequence diagram tool.
-    // System diagrams also flow left-to-right (RIGHT in ELK terms).
+    if (prepositioned) {
+      // Flow diagrams use manual swim-lane positioning (item 009 #1). ELK's
+      // layered algorithm groups partitions into the same layer, not adjacent
+      // columns, which is the opposite of what we want here.
+      setLayouted(initialNodes as Node<NodeData>[]);
+      return () => {
+        cancelled = true;
+      };
+    }
     layoutWithElk(initialNodes, edges, { direction: 'RIGHT' })
       .then((positioned) => {
         if (!cancelled) setLayouted(positioned as Node<NodeData>[]);
@@ -111,7 +120,7 @@ export function DiagramCanvas({ diagram }: { diagram: AnyDiagram }) {
     return () => {
       cancelled = true;
     };
-  }, [initialNodes, edges, diagram.kind]);
+  }, [initialNodes, edges, prepositioned, diagram.kind]);
 
   return (
     <div className="canvas-wrap">
@@ -222,6 +231,8 @@ function buildFlowElements(
 ): {
   initialNodes: Node<NodeData>[];
   edges: Edge[];
+  /** When true, nodes already have final positions and ELK should be skipped. */
+  prepositioned: boolean;
 } {
   if (diagram.kind === 'system') {
     const initialNodes: Node<NodeData>[] = diagram.nodes
@@ -261,13 +272,49 @@ function buildFlowElements(
           labelBgStyle: { fill: 'rgba(11,15,23,0.85)', fillOpacity: 0.85 },
         } as Edge;
       });
-    return { initialNodes, edges };
+    return { initialNodes, edges, prepositioned: false };
   }
 
-  // Flow diagram
-  const initialNodes: Node<NodeData>[] = diagram.nodes
+  // Flow diagram — manual swim-lane layout (009 #1).
+  // Lanes (one per unique componentId, first-appearance order) are columns
+  // spread left-to-right. Steps flow top-to-bottom in step-order. Lane headers
+  // sit above their column. A single-lane flow collapses to a single column
+  // and skips the header (the existing "mostly internal to X" banner in
+  // DiagramMeta covers that case already).
+  const LANE_WIDTH = 260;
+  const LANE_GUTTER = 60;
+  const STEP_GAP_Y = 50;
+  const STEP_HEIGHT = 120;
+  const HEADER_GAP = 28;
+  const HEADER_HEIGHT = 40;
+
+  const orderedSteps = [...diagram.nodes]
     .filter((n) => !hidden.has(n.id))
-    .map((n) => ({
+    .sort((a, b) => ((a.meta?.order as number) ?? 0) - ((b.meta?.order as number) ?? 0));
+
+  const laneIndexFor = new Map<string, number>();
+  const laneInfo: { componentId: string; componentLabel: string; kind: ComponentKind; stepCount: number }[] = [];
+  for (const n of orderedSteps) {
+    const cid = (n.meta?.componentId as string | undefined) ?? '__nocomp__';
+    if (!laneIndexFor.has(cid)) {
+      laneIndexFor.set(cid, laneIndexFor.size);
+      laneInfo.push({
+        componentId: cid,
+        componentLabel: (n.meta?.componentLabel as string | undefined) ?? cid,
+        kind: n.kind,
+        stepCount: 0,
+      });
+    }
+    laneInfo[laneIndexFor.get(cid)!].stepCount++;
+  }
+  const showLanes = laneInfo.length >= 2;
+  const laneStride = LANE_WIDTH + LANE_GUTTER;
+  const headerOffsetY = showLanes ? HEADER_HEIGHT + HEADER_GAP : 0;
+
+  const stepNodes: Node<NodeData>[] = orderedSteps.map((n, idx) => {
+    const cid = (n.meta?.componentId as string | undefined) ?? '__nocomp__';
+    const laneX = (laneIndexFor.get(cid) ?? 0) * laneStride;
+    return {
       id: n.id,
       type: 'flowStep',
       data: {
@@ -280,17 +327,55 @@ function buildFlowElements(
         onDrill,
         onHide,
       } satisfies FlowStepNodeData,
-      position: { x: 0, y: 0 },
-    }));
+      position: { x: laneX, y: headerOffsetY + idx * (STEP_HEIGHT + STEP_GAP_Y) },
+    };
+  });
+
+  const laneHeaderNodes: Node<NodeData>[] = showLanes
+    ? laneInfo.map((lane) => {
+        const laneX = (laneIndexFor.get(lane.componentId) ?? 0) * laneStride;
+        // Center the (220px) header in the (260px) lane column.
+        return {
+          id: `__lane_${lane.componentId}`,
+          type: 'laneHeader',
+          data: {
+            label: lane.componentLabel,
+            kind: lane.kind,
+            stepCount: lane.stepCount,
+          } satisfies LaneHeaderNodeData,
+          position: { x: laneX + (LANE_WIDTH - 220) / 2, y: 0 },
+          draggable: false,
+          selectable: false,
+        };
+      })
+    : [];
+
+  // Cross-lane edges (componentId source ≠ target) get a heavier dashed style
+  // so the architecturally interesting hops stand out from in-lane chains.
+  const componentIdById = new Map<string, string>();
+  for (const n of orderedSteps) {
+    componentIdById.set(n.id, (n.meta?.componentId as string | undefined) ?? '__nocomp__');
+  }
   const edges: Edge[] = diagram.edges
     .filter((e) => !hidden.has(e.source) && !hidden.has(e.target))
-    .map((e) => ({
-      id: e.id,
-      source: e.source,
-      target: e.target,
-      type: 'smoothstep',
-    }));
-  return { initialNodes, edges };
+    .map((e) => {
+      const crossLane =
+        showLanes && componentIdById.get(e.source) !== componentIdById.get(e.target);
+      return {
+        id: e.id,
+        source: e.source,
+        target: e.target,
+        type: 'smoothstep',
+        style: crossLane
+          ? { stroke: 'rgba(96,165,250,0.95)', strokeWidth: 2, strokeDasharray: '6 4' }
+          : { stroke: 'rgba(96,165,250,0.55)', strokeWidth: 1.5 },
+      } as Edge;
+    });
+  return {
+    initialNodes: [...laneHeaderNodes, ...stepNodes],
+    edges,
+    prepositioned: true,
+  };
 }
 
 function findSubFlowForStep(diagram: AnyDiagram, nodeId: string): string | undefined {

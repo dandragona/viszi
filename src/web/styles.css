@@ -755,6 +755,45 @@ button.primary:hover {
   font-family: var(--font-mono);
 }
 
+/* Swim-lane header for vertical flow diagrams (009 #1) */
+.lane-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-ui);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  box-shadow: var(--shadow-sm);
+  user-select: none;
+  pointer-events: none;
+}
+.lane-header .lane-header-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+.lane-header .lane-header-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: inherit;
+  opacity: 0.85;
+}
+
 /* React Flow overrides */
 .react-flow__edge-path {
   stroke: rgba(148,163,184,0.45);

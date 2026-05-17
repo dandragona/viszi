@@ -831,13 +831,279 @@ button.primary:hover {
   font-weight: 700;
   font-family: var(--font-mono);
 }
-/* Tighten the drill chevron — it's now the only drill affordance on flow
- * cards. Make it brighter so users notice. */
-.viszi-node.flow-step.clickable .drill-corner {
-  opacity: 0.7;
+/* The chevron — interactive button that toggles inline sub-flow expansion
+ * (009 #4). Card-body click still navigates to the sub-flow as its own page
+ * (deep-linkable fallback). */
+.viszi-node.flow-step .flow-step-chevron {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  padding: 0;
+  background: var(--node-bg);
+  color: var(--node-accent);
+  opacity: 0.75;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.15s, background 0.15s, border-color 0.15s;
 }
-.viszi-node.flow-step.clickable:hover .drill-corner {
+.viszi-node.flow-step .flow-step-chevron:hover {
   opacity: 1;
+  border-color: var(--node-accent);
+  background: rgba(96, 165, 250, 0.16);
+}
+.viszi-node.flow-step .flow-step-chevron.open {
+  opacity: 1;
+  background: var(--node-accent);
+  color: var(--bg-0);
+  border-color: var(--node-accent);
+  transform: rotate(45deg);
+}
+.viszi-node.flow-step.is-expanded {
+  box-shadow: 0 0 0 2px var(--node-accent), 0 14px 30px -10px var(--node-glow, rgba(0, 0, 0, 0.5));
+}
+
+/* Hover preview chip — shows a tiny "↘ N sub-steps · A → B → C" tooltip on
+ * the card when a sub-flow is available. Anchored below the card so it
+ * doesn't get clipped by edges above. */
+.viszi-node.flow-step .flow-step-preview {
+  position: absolute;
+  left: 50%;
+  bottom: -10px;
+  transform: translate(-50%, 100%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: rgba(11, 15, 23, 0.94);
+  border: 1px solid var(--node-accent);
+  border-radius: 999px;
+  color: var(--fg-1);
+  font-size: 10px;
+  font-family: var(--font-ui);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 5;
+  box-shadow: var(--shadow-lg);
+  transition: opacity 0.18s;
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.viszi-node.flow-step:hover .flow-step-preview {
+  opacity: 1;
+}
+.viszi-node.flow-step .flow-step-preview-arrow {
+  color: var(--node-accent);
+  font-weight: 700;
+}
+.viszi-node.flow-step .flow-step-preview-count {
+  color: var(--fg-0);
+  font-weight: 600;
+}
+.viszi-node.flow-step .flow-step-preview-chain {
+  color: var(--fg-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 260px;
+}
+
+/* Inline sub-flow panel (009 #4). Slides in from the right with a small
+ * animation; mirrors FilesPanel positioning so the two stack predictably. */
+.subflow-panel {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 420px;
+  max-height: calc(100% - 28px);
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  background: rgba(17, 24, 39, 0.96);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  backdrop-filter: blur(8px);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  animation: subflow-slide-in 0.18s ease-out;
+}
+@keyframes subflow-slide-in {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.subflow-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(11, 15, 23, 0.6);
+}
+.subflow-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--fg-1);
+  min-width: 0;
+}
+.subflow-panel-title strong {
+  color: var(--fg-0);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.subflow-panel-tag {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  background: rgba(96, 165, 250, 0.12);
+  border: 1px solid rgba(96, 165, 250, 0.45);
+  border-radius: 4px;
+  padding: 2px 6px;
+  flex-shrink: 0;
+}
+.subflow-panel-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.subflow-panel-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--fg-2);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.subflow-panel-actions button:hover {
+  color: var(--fg-0);
+  border-color: var(--border-strong);
+  background: rgba(255, 255, 255, 0.03);
+}
+.subflow-panel-body {
+  overflow-y: auto;
+  padding: 10px 12px 14px;
+  flex: 1;
+}
+.subflow-panel-loading,
+.subflow-panel-error {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  color: var(--fg-2);
+  font-size: 12px;
+}
+.subflow-panel-error {
+  color: rgba(248, 113, 113, 0.85);
+}
+.subflow-panel-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-3);
+  margin-bottom: 6px;
+}
+.subflow-panel-desc {
+  margin: 0 0 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--fg-1);
+}
+.subflow-step-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.subflow-step {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.subflow-step-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px 6px;
+  width: 44px;
+  flex: 0 0 44px;
+  border-right: 1px solid;
+  font-weight: 700;
+}
+.subflow-step-order {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: inherit;
+}
+.subflow-step-body {
+  padding: 8px 10px;
+  flex: 1;
+  min-width: 0;
+}
+.subflow-step-component {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+.subflow-step-action {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg-0);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.subflow-step-desc {
+  font-size: 11px;
+  color: var(--fg-2);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+.subflow-step-files {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.subflow-step-files li {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--fg-3);
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 3px;
+  padding: 1px 6px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Swim-lane header for vertical flow diagrams (009 #1) */

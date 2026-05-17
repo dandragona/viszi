@@ -45,10 +45,10 @@ From the gimli run:
 
 **Gap:** drilling into a sub-flow loses the parent context entirely — new page, only "Back". For a 7-step parent with a 4-step sub-flow at step 3, the user wants to see *the sub-flow inserted in place*, not the parent replaced.
 
-- [ ] On a flow page, hovering a step with `subDiagramId` shows a small preview chip "↘ 4 sub-steps · parses JSON-RPC → charges budget → runs FTS5 → audit".
-- [ ] Clicking the chevron *expands* that step in-place into its sub-steps (animated, indented under the parent). Clicking again collapses. State persisted in the URL hash (`#expand=flow.x.s3`).
-- [ ] Alternatively (or additionally): a split-pane mode where the sub-flow opens on the right, parent stays visible on the left — like a docs-style "expand inline" pattern.
-- [ ] Keep the current "navigate to sub-flow as its own page" route as a fallback (deep-linkable).
+- [x] Hovering a drillable step kicks off a debounced (120ms) sub-flow fetch and shows a tooltip-style preview chip "↘ N sub-steps · A → B → C → D" anchored below the card. Fetched diagrams are cached in `subFlowPreviewCache` so a single sub-flow is loaded at most once per session.
+- [x] Clicking the chevron (top-right of the card) toggles inline expansion. State is persisted in the URL hash as `expand=<stepId>` (coexists with the existing `hide=` param via the new shared `parseHashParams` / `writeHashParam` helpers). Toggling the same step closes the panel; clicking a different step swaps without an intermediate empty state.
+- [x] Implemented as a **split-pane**: the sub-flow opens in a slide-in panel on the right (`SubFlowPanel`), parent canvas stays visible on the left. The chevron rotates 45° and the expanded step gets a 2px accent-colour outer glow so it's clear which step is being inspected. Cleaner than literal in-place insertion which would have required reflowing the swim-lane grid every toggle.
+- [x] Card-body click still navigates to the sub-flow as its own page (deep-linkable fallback). The panel also surfaces an explicit "Open page ↗" button for the same purpose. Esc / × close the panel; the URL hash `#expand=...` deep-links straight into the expanded state on fresh load.
 
 ## 5. Sidebar flow grouping
 

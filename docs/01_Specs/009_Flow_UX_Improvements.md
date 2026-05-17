@@ -78,17 +78,17 @@ From the gimli run:
 
 **Gap:** every flow step has `files: []`. The FilesPanel only opens for system-diagram nodes; clicking a flow step never opens it. But the most natural question after reading "runs FTS5 query against catalog.sqlite3" is "show me the function that does that."
 
-- [ ] Extend `SubFlowSchema` and `FlowsSchema` in `src/ai/schemas.ts` to include an optional `files: string[]` per step (max 5 items, sourced from the step's `componentId`'s file list).
-- [ ] Bump `SCHEMA_VERSION` so existing caches re-run for the new field.
-- [ ] Tighten the flow prompt to ask Claude to cite the one or two files that implement each step, drawing from the component's `members[]` list it already has in context.
-- [ ] Wire `FilesPanel` onto `FlowStepNode` clicks (or a sub-button) when `files.length > 0`.
+- [x] `SubFlowSchema` and `FlowsSchema` both include `files: string[]` per step (max 5). Optional in the schema (model may omit when no file is a good cite) but heavily encouraged in the prompt.
+- [x] `SCHEMA_VERSION` bumped 3→4. Both the prompt and the schema changed, so any cached AI responses re-run on next analysis.
+- [x] Flow prompt now requires `description` per step and asks for 1–2 file citations drawn from the component's `members[]` list, with anti-pattern examples for both.
+- [x] `FlowStepNode` renders a `[N files]` chip below the description when files are present; click opens `FilesPanel`. `mergeConsecutiveSimilarSteps` unions citations when collapsing, capped at 5.
 
 ## 9. Step descriptions
 
 **Gap:** `FlowsSchema` already allows an optional `description` per step (`schemas.ts:99`), but it's empty on every gimli flow node — the prompt doesn't ask for it. So step cards show only the verb-phrase title.
 
-- [ ] Update the flow-generation prompt to require a 1-line `description` per step explaining *why* (constraint or business intent), in addition to the existing `action` (what mechanically happens).
-- [ ] Render the description on the card (1 line, faded, below the action), or in a tooltip — and definitely on the inline-expanded sub-flow rows (item 4).
+- [x] Prompt now requires `description` per step with GOOD/BAD examples emphasising *why* over *what*. Schema validates `minLength: 1`.
+- [x] Card renders the description in `.flow-step-desc` (faded, below the action). Inline sub-flow rows when item #4 lands will pick this up automatically.
 
 ## 10. L1 page should surface flows, not bury them
 

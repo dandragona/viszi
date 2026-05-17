@@ -168,6 +168,7 @@ interface ClaudeFlowsResp {
       componentId: string;
       action: string;
       description?: string;
+      files?: string[];
     }>;
   }>;
 }
@@ -759,7 +760,7 @@ async function analyzeFlowsTier(args: FlowTierArgs): Promise<void> {
 
   if (!resp) {
     if (opts.dryRun) {
-      resp = mockFlows(summary, entrypoints);
+      resp = mockFlows(components, entrypoints);
     } else {
       const result = await callClaude<ClaudeFlowsResp>({
         prompt: buildFlowsPrompt({ ...promptInput, explanation }),
@@ -952,6 +953,7 @@ function buildFlowDiagram(args: {
       componentId: componentIds.has(s.componentId) ? s.componentId : components[0]?.id ?? 'unknown',
       action: s.action,
       description: s.description,
+      files: s.files ?? [],
     })),
   );
   const steps: FlowStep[] = merged.map((s, i) => ({
@@ -960,13 +962,14 @@ function buildFlowDiagram(args: {
     componentId: s.componentId,
     action: s.action,
     description: s.description,
+    files: s.files,
   }));
 
   // Build node + edge views suitable for React Flow rendering.
-  // NOTE: do not copy `comp.files` into each step's nodes[i].files — the same
-  // 100-file list was being inlined N times per flow, blowing search/index size
-  // (#9 in 007_Post_Launch_TODO). The frontend resolves files via `componentId`
-  // against the parent system diagram when it needs them.
+  // NOTE: `nodes[i].files` is bounded by the schema to ≤5 — these are the
+  // files the AI cited for that step, not the full component file list. The
+  // 100-files-per-step blow-up that #9 in 007_Post_Launch_TODO warned against
+  // is the unbounded `comp.files` copy; that one still must not be inlined.
   const nodes: DiagramNode[] = steps.map((s) => {
     const comp = components.find((c) => c.id === s.componentId);
     return {
@@ -974,7 +977,7 @@ function buildFlowDiagram(args: {
       label: s.action,
       kind: comp?.kind ?? 'unknown',
       description: s.description ?? comp?.label,
-      files: [],
+      files: s.files ?? [],
       subDiagramId: undefined,
       meta: { componentId: s.componentId, componentLabel: comp?.label, order: s.order },
     };
@@ -1021,7 +1024,7 @@ function buildFlowDiagram(args: {
  * Pure function — exported for unit tests.
  */
 export function mergeConsecutiveSimilarSteps<
-  S extends { componentId: string; action: string; description?: string },
+  S extends { componentId: string; action: string; description?: string; files?: string[] },
 >(steps: S[]): S[] {
   if (steps.length < 2) return steps.slice();
   const out: S[] = [];
@@ -1041,10 +1044,17 @@ export function mergeConsecutiveSimilarSteps<
       prev.description && s.description && prev.description !== s.description
         ? `${prev.description}; ${s.description}`
         : prev.description ?? s.description;
+    // Union the cited file lists, capped to 5 (same upper bound the schema
+    // enforces per step).
+    const mergedFiles =
+      prev.files || s.files
+        ? Array.from(new Set([...(prev.files ?? []), ...(s.files ?? [])])).slice(0, 5)
+        : undefined;
     out[out.length - 1] = {
       ...prev,
       action: keepCurrent ? s.action : prev.action,
       description: mergedDesc,
+      files: mergedFiles,
     } as S;
   }
   return out;
@@ -1139,7 +1149,7 @@ function mockComponents(modules: Module[]): ClaudeComponentsResp {
 }
 
 function mockFlows(
-  components: Array<{ id: string; label: string; kind: string }>,
+  components: Array<{ id: string; label: string; kind: string; files: string[] }>,
   entrypoints: Entrypoint[],
 ): ClaudeFlowsResp {
   if (components.length < 2) {
@@ -1158,6 +1168,7 @@ function mockFlows(
           componentId: c.id,
           action: `Step ${i + 1}: ${c.label}`,
           description: `Stub action through ${c.label}`,
+          files: c.files.slice(0, 2),
         })),
       },
     ],

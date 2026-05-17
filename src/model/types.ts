@@ -60,6 +60,12 @@ export interface FlowStep {
   componentId: string;
   action: string;
   description?: string;
+  /**
+   * Up to 5 source files that implement this step, chosen from the
+   * componentId's member list. Populated by the AI flow prompt (009 #8).
+   * Empty for flows generated against older `SCHEMA_VERSION`s.
+   */
+  files?: string[];
   subDiagramId?: string;
 }
 

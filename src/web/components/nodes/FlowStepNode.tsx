@@ -1,4 +1,4 @@
-import { Handle, Position } from 'reactflow';
+import { Handle, Position, useNodeId } from 'reactflow';
 import { styleForKind } from '../../theme';
 import { Icon } from '../Icon';
 import type { ComponentKind } from '../../../model/types.js';
@@ -9,13 +9,18 @@ export interface FlowStepNodeData {
   kind: ComponentKind;
   description?: string;
   componentLabel?: string;
+  files?: string[];
   subDiagramId?: string;
   onDrill?: (id: string) => void;
+  onShowFiles?: (id: string) => void;
 }
 
 export function FlowStepNode({ data }: { data: FlowStepNodeData }) {
+  const nodeId = useNodeId();
   const style = styleForKind(data.kind);
   const clickable = !!data.subDiagramId;
+  const fileCount = data.files?.length ?? 0;
+  const hasFiles = fileCount > 0;
   const cssVars = {
     ['--node-accent' as never]: style.accent,
     ['--node-bg' as never]: style.background,
@@ -26,6 +31,10 @@ export function FlowStepNode({ data }: { data: FlowStepNodeData }) {
     if (!data.subDiagramId) return;
     e.stopPropagation();
     data.onDrill?.(data.subDiagramId);
+  };
+  const onFilesClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (nodeId && data.onShowFiles) data.onShowFiles(nodeId);
   };
   return (
     <div
@@ -56,6 +65,17 @@ export function FlowStepNode({ data }: { data: FlowStepNodeData }) {
           <span className="node-label">{data.label}</span>
         </div>
         {data.description && <div className="flow-step-desc">{data.description}</div>}
+        {hasFiles && data.onShowFiles && (
+          <button
+            type="button"
+            className="flow-step-files"
+            onClick={onFilesClick}
+            title={`Show the ${fileCount} file${fileCount === 1 ? '' : 's'} that implement this step`}
+          >
+            <Icon name="file-text" size={10} />
+            {fileCount} file{fileCount === 1 ? '' : 's'}
+          </button>
+        )}
       </div>
       <Handle type="source" position={Position.Bottom} />
     </div>

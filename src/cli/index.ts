@@ -78,6 +78,11 @@ program
     'Run Claude in `--bare` mode. Skips user hooks/MCP/CLAUDE.md for predictable analysis, but disables OAuth/keychain auth — requires ANTHROPIC_API_KEY.',
     false,
   )
+  .option(
+    '--two-stage',
+    'Run each scope through a two-stage prompt: a free-text architectural narrative first, then the schema-constrained call seeded with that narrative. Doubles AI calls (and cost) but tends to produce better component names and step labels. See ADR-013.',
+    false,
+  )
   .addOption(new Option('--model <name>', 'Claude model alias or full id (e.g. opus, sonnet)'))
   .option('-v, --verbose', 'Verbose logging')
   .option('-q, --quiet', 'Errors only')
@@ -96,6 +101,7 @@ program
       cache: opts.cache !== false,
       dryRun: !!opts.dryRun,
       bare: !!opts.bare,
+      twoStage: !!opts.twoStage,
       model: opts.model as string | undefined,
       verbose: !!opts.verbose,
       quiet: !!opts.quiet,
@@ -203,6 +209,7 @@ program.addHelpText(
   ${k.cyan('viszi ./monorepo --levels 3')}  Three tiers deep
   ${k.cyan('viszi . --root-scope src/app')} Start the L1 diagram inside src/app/
   ${k.cyan('viszi . --no-flows')}           Skip flow diagrams
+  ${k.cyan('viszi . --two-stage')}          Higher-quality output: prose narrative → structured call (2× AI calls)
   ${k.cyan('viszi . --dry-run')}            Generate stub diagrams without calling Claude
   ${k.cyan('viszi serve .')}                Re-open an existing analysis
   ${k.cyan('viszi regen sys__src_auth__L2 .')} Re-run one AI call (cache makes the rest free)

@@ -164,3 +164,56 @@ Each entry follows: **Decision · Context · Why · Consequences**.
 **Why**: There's no second consumer of `viszi-core` today. The split is overhead.
 
 **Consequences**: If we ever want a JetBrains plugin or an embeddable React component, we'll extract `viszi-core` then.
+
+---
+
+## ADR-014: Tree-sitter for Python + Go (closes the callsite gap from ADR-003) (2026-05)
+
+**Decision**: Replace the regex Python and Go parsers with tree-sitter implementations behind the same `LanguageParser` interface. The JS/TS parser stays on regex.
+
+**Context**: ADR-003 deferred tree-sitter to v0.2 over install-cost concerns (per-language WASM bundling, possible `node-gyp` breakage on Windows/musl). The intervening dogfooding showed the concrete cost of staying on regex: Python and Go parsers were emitting **empty `callsites` arrays** (documented in `005_v0.2_Features.md`), so flow diagrams for those languages were built from a strictly worse graph than JS/TS ones. Regex also misses conditional imports, decorators-as-imports, dotted attribute calls — gaps that the AI cannot route around because the *starting graph* is wrong.
+
+**Why**: Parser quality is a floor, not a ceiling — better parsing won't make Claude smarter, but it stops feeding Claude a wrong starting graph. Tree-sitter closes both gaps at once.
+
+The two original install-cost worries are addressed concretely:
+
+- **Bundle size**: We use `tree-sitter-wasms` (devDep) and copy only `tree-sitter-python.wasm` (~465KB), `tree-sitter-go.wasm` (~231KB), and `tree-sitter.wasm` runtime (~186KB) into `grammars/` at build time. **~880KB total** added to the npm tarball — small enough not to register against a tool that already shells out to Claude.
+- **node-gyp / npx breakage**: We never depend on the native `tree-sitter-{python,go}` packages. Only `web-tree-sitter` (WASM runtime) ships to the user. No native bindings, no `node-gyp`, no platform-specific install failures.
+
+JS/TS stays regex because the existing parser already extracts callsites correctly and the language's normal patterns (static `import` + clear `export`) are well-served by regex. Revisiting JS is a separate decision when (and if) dynamic-import / re-export edge cases hurt real diagrams.
+
+**Consequences**:
+
+- `web-tree-sitter` is now a runtime dep; `tree-sitter-wasms` is a devDep used only at build time.
+- `npm run build:grammars` (run as part of `npm run build` and `prepublishOnly`) copies the three WASMs into `grammars/`. The directory is gitignored — regenerated from `node_modules` so binaries don't live in git history.
+- `LanguageParser.parse()` stays synchronous. The async tree-sitter setup (`Parser.init()` + `Language.load()`) is hoisted to a one-time `initTreeSitter()` call that `runAnalysis` awaits before any parsing. A shared vitest `setupFiles` does the same for the test suite.
+- Behavioural drift from the regex version: Python now correctly marks `_underscore` names as `exported: false` (regex marked everything `true`). Go now captures methods, top-level consts, and top-level vars (regex only captured funcs + types).
+- Callsites for Python and Go are no longer empty. Some decorator calls (e.g. `@app.route(...)` showing up as a callsite for `route`) appear as low-level noise — acceptable because the downstream had zero callsite signal previously; filtering can come later if it causes problems in real diagrams.
+- The old `src/analyzer/parsers/regex_python.ts` and `regex_go.ts` are deleted. JS regex parser is unchanged.
+
+---
+
+## ADR-015: Optional two-stage AI pipeline (prose narrative → structured graph) (2026-05)
+
+**Decision**: Add an opt-in `--two-stage` flag (and corresponding `OrchestratorOpts.twoStage`) that runs each AI scope through two calls instead of one:
+
+1. **Stage 1** — `callClaudeText` (no `--json-schema`) with `buildComponentsExplanationPrompt` / `buildFlowsExplanationPrompt`. Returns a 150–250 word architectural narrative.
+2. **Stage 2** — the existing `callClaude` with the existing schemas, but the stage-1 prose is injected into the prompt as a `<prior_explanation>` block that the model is told to treat as ground truth.
+
+Both stages cache separately (`promptName: 'components-explain'` / `'flows-explain'` vs `'components'` / `'flows'`); the stage-2 cache key includes the stage-1 prose so a re-explained scope correctly invalidates the structured cache. Default is `false`; the flag must be explicitly enabled.
+
+**Context**: Inspired by the prompt pipeline in [gitdiagram](https://github.com/ahmedkhaleel2004/gitdiagram), which splits its generation into a free-text `<explanation>` followed by a structured JSON graph. The gimli reference run (`009_Flow_UX_Improvements.md`) surfaced several quality gaps in the single-stage output — vague step labels, monolithic flows, generic component names — that match the failure mode the prose-first pattern is designed to fix. The schema-constrained call gets tunnel vision: it spends most of its capacity satisfying the schema rather than reasoning about the architecture. A prior, unconstrained call lets the model do the reasoning first, then the structured call mostly transcribes.
+
+**Why**: Two separate behaviours emerge from one ~150-word narrative that the schema-constrained call cannot do by itself: (a) deciding *which* edges and components matter (most observed missing-edge cases were not "the model didn't know" but "the schema budget squeezed reasoning out"), and (b) naming things the way an engineer would (the narrative produces "Trade Pipeline" before "trade_pipeline service", and stage 2 then preserves that naming through the JSON). Caching stage 1 separately also means a stage-2 prompt tweak (e.g. tightening the step-quality rules) does not re-pay for the prose.
+
+The doubling of AI cost is the obvious downside, which is why this is opt-in. The estimator (`estimateAiCalls(…, twoStage)`) is updated so the pre-flight cost preview and the progress-bar ETA reflect the 2× call count when the flag is on.
+
+**Consequences**:
+
+- `callClaudeText` is a new public surface in `src/ai/claude.ts` (alongside `callClaude<T>`). The two share a `runClaudeSubprocess` helper; the only differences are: no `--json-schema` arg, and `parseClaudeEnvelope(stdout, stderr, 'text')` returns the raw `result` string instead of JSON-parsing it.
+- `ProgressEvent.phase: 'ai'` now carries two more `kind` values: `'components-explain'` and `'flows-explain'`. Frontend banners that switch on `kind` need to handle them (they fall through to the default progress styling today).
+- The stage-2 prompt is unchanged when `explanation` is absent — single-stage runs produce byte-identical prompts and cache files to before this ADR. There is no migration cost for existing `.viszi/` outputs.
+- The pattern is uniform across components and flows. If one stage's quality lift turns out to be much higher than the other's, a future flag like `--two-stage=flows-only` is a small refactor (the helper `runExplanationStage` is already factored).
+- We do **not** also implement gitdiagram's validate-and-retry loop here; that's a separate decision (open in `009_Flow_UX_Improvements.md` follow-ups). The two-stage pattern alone is the smaller, more reversible step.
+
+**Follow-ups** (not in scope of this ADR): measure stage-1 prose drift across runs (does the cache hit rate justify the separate cache, or should we collapse to one key?), and test whether stage 1 benefits from a smaller/cheaper model than stage 2 (`--model-explain` vs `--model`).

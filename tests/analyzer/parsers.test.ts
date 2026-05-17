@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { JsLikeParser } from '../../src/analyzer/parsers/regex_js.js';
-import { PythonParser } from '../../src/analyzer/parsers/regex_python.js';
-import { GoParser } from '../../src/analyzer/parsers/regex_go.js';
+import { PythonTreeSitterParser } from '../../src/analyzer/parsers/tree_sitter_python.js';
+import { GoTreeSitterParser } from '../../src/analyzer/parsers/tree_sitter_go.js';
 
 describe('JsLikeParser', () => {
   const p = new JsLikeParser();
@@ -59,8 +59,8 @@ console.log('noise');
   });
 });
 
-describe('PythonParser', () => {
-  const p = new PythonParser();
+describe('PythonTreeSitterParser', () => {
+  const p = new PythonTreeSitterParser();
 
   it('extracts from/import imports and defs', () => {
     const src = `from src.db import db\nimport os\n\ndef do_work():\n    return db.query('select 1')\n\nclass Worker:\n    pass\n`;
@@ -77,10 +77,37 @@ describe('PythonParser', () => {
     const sigs = parsed.httpHandlers.map((h) => `${h.method} ${h.path}`);
     expect(sigs).toEqual(expect.arrayContaining(['GET /health', 'POST /items']));
   });
+
+  it('extracts callsites and links them back to from-imports', () => {
+    const src = `from .util import compute_thing\nimport requests\n\ndef job():\n    x = compute_thing()\n    return requests.get('http://x').json()\n`;
+    const parsed = p.parse('/j.py', 'j.py', src);
+    const callees = parsed.callsites.map((c) => c.callee);
+    expect(callees).toContain('compute_thing');
+    expect(callees).toContain('get');
+    const cs = parsed.callsites.find((c) => c.callee === 'compute_thing');
+    expect(cs?.fromImport).toBe('.util');
+  });
+
+  it('marks underscore-prefixed names as unexported', () => {
+    const src = `def _helper(): pass\ndef public(): pass\n`;
+    const parsed = p.parse('/u.py', 'u.py', src);
+    expect(parsed.symbols.find((s) => s.name === '_helper')?.exported).toBe(false);
+    expect(parsed.symbols.find((s) => s.name === 'public')?.exported).toBe(true);
+  });
+
+  it('skips nested defs (only top-level symbols)', () => {
+    const src = `class Outer:\n    def method(self): pass\n\ndef top():\n    def inner(): pass\n    return inner\n`;
+    const parsed = p.parse('/n.py', 'n.py', src);
+    const names = parsed.symbols.map((s) => s.name);
+    expect(names).toContain('Outer');
+    expect(names).toContain('top');
+    expect(names).not.toContain('method');
+    expect(names).not.toContain('inner');
+  });
 });
 
-describe('GoParser', () => {
-  const p = new GoParser();
+describe('GoTreeSitterParser', () => {
+  const p = new GoTreeSitterParser();
 
   it('extracts imports, func decls and exported-vs-unexported', () => {
     const src = `package main\n\nimport "net/http"\nimport (\n  "fmt"\n  "github.com/x/y"\n)\n\nfunc Run() {}\nfunc private() {}\n\ntype Server struct{}\n`;
@@ -96,9 +123,28 @@ describe('GoParser', () => {
   });
 
   it('detects net/http and mux-style HTTP handlers', () => {
-    const src = `http.HandleFunc("/a", h)\nrouter.Get("/b", handler)\n`;
+    const src = `package x\nfunc setup() {\n  http.HandleFunc("/a", h)\n  router.Get("/b", handler)\n}\n`;
     const parsed = p.parse('/h.go', 'h.go', src);
     const paths = parsed.httpHandlers.map((h) => h.path);
     expect(paths).toEqual(expect.arrayContaining(['/a', '/b']));
+  });
+
+  it('extracts callsites for method calls and bare calls', () => {
+    const src = `package main\nimport "log"\nfunc run() {\n  log.Println("hi")\n  process()\n  s.Save()\n}\nfunc process() {}\n`;
+    const parsed = p.parse('/c.go', 'c.go', src);
+    const callees = parsed.callsites.map((c) => c.callee);
+    expect(callees).toContain('Println');
+    expect(callees).toContain('process');
+    expect(callees).toContain('Save');
+  });
+
+  it('captures methods on receivers and top-level type/const/var', () => {
+    const src = `package x\ntype S struct{}\nfunc (s *S) Do() {}\nconst Tag = "v1"\nvar count = 0\n`;
+    const parsed = p.parse('/r.go', 'r.go', src);
+    const names = parsed.symbols.map((s) => s.name);
+    expect(names).toContain('S');
+    expect(names).toContain('Do');
+    expect(names).toContain('Tag');
+    expect(names).toContain('count');
   });
 });

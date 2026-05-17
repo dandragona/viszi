@@ -23,6 +23,7 @@ export interface AnalyzeArgs {
   dryRun: boolean;
   bare: boolean;
   model?: string;
+  twoStage: boolean;
   verbose?: boolean;
   quiet?: boolean;
 }
@@ -190,6 +191,7 @@ export async function runAnalyzeCommand(args: AnalyzeArgs): Promise<number> {
       model: args.model,
       bare: args.bare,
       dryRun: args.dryRun,
+      twoStage: args.twoStage,
       config: cfg,
       onProgress: (e) => {
         onProgress(e);

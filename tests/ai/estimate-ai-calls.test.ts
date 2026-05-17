@@ -29,4 +29,14 @@ describe('estimateAiCalls (#14)', () => {
     expect(COST_PER_CALL_PRIOR_USD).toBeGreaterThan(0);
     expect(COST_PER_CALL_PRIOR_USD).toBeLessThan(5);
   });
+
+  it('doubles when twoStage is enabled (one prose call + one structured call per scope)', () => {
+    const base = estimateAiCalls(4, 2, true);
+    const twoStage = estimateAiCalls(4, 2, true, true);
+    expect(twoStage).toBe(base * 2);
+  });
+
+  it('twoStage default is off (preserves existing call-site semantics)', () => {
+    expect(estimateAiCalls(4, 2, true)).toBe(estimateAiCalls(4, 2, true, false));
+  });
 });

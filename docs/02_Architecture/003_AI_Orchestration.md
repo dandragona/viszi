@@ -29,10 +29,21 @@ A `SCHEMA_VERSION` constant participates in the cache key — bump it whenever t
 ## Prompts
 
 Located in `src/ai/prompts/`. Prompts are pure functions of typed inputs:
-- `buildComponentsPrompt({ scope, level, totalLevels, parentLabel?, parentDescription?, modules, graphSummary })` — for system diagrams.
-- `buildFlowsPrompt({ scope, componentSummary, entrypoints, parentFlowName?, parentStepAction?, level, totalLevels })` — for flow diagrams (and sub-flows).
+- `buildComponentsPrompt({ scope, level, totalLevels, parentLabel?, parentDescription?, modules, graphSummary, explanation? })` — for system diagrams.
+- `buildFlowsPrompt({ scope, componentSummary, entrypoints, parentFlowName?, parentStepAction?, level, totalLevels, explanation? })` — for flow diagrams (and sub-flows).
 
 Prompts include the deterministic module/component summary as JSON inside the prompt text; Claude is told to ground its labelling in those structures rather than invent ids.
+
+### Two-stage mode (`--two-stage`, opt-in)
+
+When `OrchestratorOpts.twoStage` is true, each scope runs through *two* AI calls instead of one:
+
+1. **Stage 1 (prose)** — `buildComponentsExplanationPrompt` / `buildFlowsExplanationPrompt` go through `callClaudeText` (no `--json-schema`). The model is explicitly told **not** to output JSON; it returns a 150–250 word architectural narrative covering the most important components / flows.
+2. **Stage 2 (structured)** — the existing `buildComponentsPrompt` / `buildFlowsPrompt` plus the stage-1 prose injected as a `<prior_explanation>` block. The model is told to treat the narrative as ground truth for naming and edge selection.
+
+Both stages cache independently. The shared helper `runExplanationStage` (in `orchestrator.ts`) owns the stage-1 plumbing — same opts as stage 2, but a distinct `promptName` (`components-explain` / `flows-explain`) and separate `progress` event kinds (`components-explain` / `flows-explain`). The stage-2 cache key includes the prose, so a stage-1 re-run correctly invalidates the structured cache below it. See ADR-015.
+
+The pattern is borrowed from gitdiagram. Default off because it doubles AI call count.
 
 ## Recursion (BFS)
 

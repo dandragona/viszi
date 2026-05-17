@@ -66,6 +66,15 @@ describe('buildClaudeArgs', () => {
     expect(a1).not.toContain('--bare');
     expect(a2).not.toContain('--bare');
   });
+
+  it('omits --json-schema in text mode (no schema field)', () => {
+    // Text mode is the stage-1 half of the two-stage pipeline — we want a
+    // free-text response, not a structured one. The absence of --json-schema
+    // is what makes Claude return prose in `result`.
+    const args = buildClaudeArgs({ prompt: 'p' });
+    expect(args).not.toContain('--json-schema');
+    expect(args[args.length - 1]).toBe('p');
+  });
 });
 
 describe('parseClaudeEnvelope', () => {
@@ -167,5 +176,34 @@ describe('parseClaudeEnvelope', () => {
       expect(e.stderr).toBe('boom stderr');
       expect(e.stdout).toBe('not-json');
     }
+  });
+
+  describe('text mode', () => {
+    it('returns the raw `result` string without JSON-parsing it', () => {
+      const stdout = JSON.stringify({
+        is_error: false,
+        result: 'A short architectural narrative: the system has three components…',
+        total_cost_usd: 0.02,
+      });
+      const { data, costUsd } = parseClaudeEnvelope<string>(stdout, '', 'text');
+      expect(data).toBe('A short architectural narrative: the system has three components…');
+      expect(costUsd).toBe(0.02);
+    });
+
+    it('throws when the result is not a string (would indicate a schema slip)', () => {
+      const stdout = JSON.stringify({
+        is_error: false,
+        result: { not: 'a string' },
+        total_cost_usd: 0.01,
+      });
+      expect(() => parseClaudeEnvelope<string>(stdout, '', 'text')).toThrow(
+        /text mode expected a string/,
+      );
+    });
+
+    it('still surfaces is_error envelopes in text mode', () => {
+      const stdout = JSON.stringify({ is_error: true, error: 'budget exceeded' });
+      expect(() => parseClaudeEnvelope<string>(stdout, '', 'text')).toThrow(/budget exceeded/);
+    });
   });
 });

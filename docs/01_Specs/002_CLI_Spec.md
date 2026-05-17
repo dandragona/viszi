@@ -21,6 +21,7 @@ Analyse a codebase and serve interactive diagrams.
 | `--no-cache` | cache on | Disable on-disk response cache |
 | `--dry-run` | off | Skip Claude entirely; emit synthetic stub diagrams. Useful for offline dev or estimating output structure |
 | `--bare` | off | Run `claude` in `--bare` mode (skip hooks/MCP/CLAUDE.md). Off by default because `claude --bare` also disables OAuth/keychain auth — requires `ANTHROPIC_API_KEY` to be set. |
+| `--two-stage` | off | Two-stage prompt pipeline: first call returns a free-text architectural narrative, second call (schema-constrained) is seeded with that narrative as `<prior_explanation>`. Doubles AI calls (and cost). Tends to produce better component names, edge selection, and step labels. See ADR-015. |
 | `--model <name>` | claude default | Override the Claude model alias (`opus`, `sonnet`, etc) |
 | `-v, --verbose` | off | Verbose progress output |
 | `-q, --quiet` | off | Errors only |
@@ -90,6 +91,7 @@ viszi .
 viszi ./apps/web --levels 3 --concurrency 8
 viszi . --no-flows --no-open
 viszi . --dry-run                    # offline stubs
+viszi . --two-stage                  # higher-quality output via prose-then-structured pipeline (2x AI calls)
 viszi . --model opus --max-budget-usd 1.0
 viszi serve ./somewhere
 viszi export . --out my-system.html  # single shareable HTML

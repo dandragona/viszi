@@ -1,6 +1,6 @@
 {
   "name": "viszi",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "AI-powered multi-tiered interactive system & flow diagrams for any codebase. Uses your local Claude Code CLI for inference.",
   "license": "MIT",
   "author": "Daniel Mandragona <danielmandragona@gmail.com>",

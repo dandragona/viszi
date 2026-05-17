@@ -83,6 +83,42 @@ describe('runAnalysis --dry-run', () => {
     }
   });
 
+  it('populates flow index entries with `shape` and `flowOrder` (009 #5 + #6)', async () => {
+    const index = JSON.parse(readFileSync(indexFile(outputDir), 'utf8')) as {
+      diagrams: Array<{
+        id: string;
+        kind: string;
+        level: number;
+        parentId?: string;
+        shape?: string[];
+        flowOrder?: number;
+      }>;
+    };
+    const flowEntries = index.diagrams.filter((d) => d.kind === 'flow');
+    expect(flowEntries.length).toBeGreaterThan(0);
+
+    // Every flow entry (top-level + sub) gets a shape — one componentKind per step.
+    for (const e of flowEntries) {
+      expect(e.shape).toBeDefined();
+      expect(Array.isArray(e.shape)).toBe(true);
+      expect(e.shape!.length).toBeGreaterThan(0);
+    }
+
+    // Sub-flow entries (level > 1) carry a flowOrder pointing at their parent
+    // step. Top-level flows have no flowOrder.
+    const subFlows = flowEntries.filter((e) => e.level > 1);
+    if (subFlows.length > 0) {
+      for (const sf of subFlows) {
+        expect(sf.flowOrder).toBeTypeOf('number');
+        expect(sf.flowOrder).toBeGreaterThanOrEqual(1);
+      }
+    }
+    const topFlows = flowEntries.filter((e) => e.level === 1);
+    for (const tf of topFlows) {
+      expect(tf.flowOrder).toBeUndefined();
+    }
+  });
+
   it('the mock components response validates against ComponentsSchema-shaped data', async () => {
     // After the run, read one system diagram and confirm its (id, label, kind, description)
     // tuples match the component-shape constraints in the schema.

@@ -101,9 +101,16 @@ export class DiagramWriter {
         parentId: d.parentId,
       };
       if (d.kind === 'flow') {
-        const mono = (d as FlowDiagram).meta?.monoComponent;
+        const flow = d as FlowDiagram;
+        const mono = flow.meta?.monoComponent;
         if (mono) {
           entry.monoComponent = { componentLabel: mono.componentLabel, share: mono.share };
+        }
+        // Per-step component-kind sequence (009 #6). Drives the sparkline-style
+        // shape glyph in the sidebar. Kept on every flow entry (not just
+        // top-level) so the same renderer works when sub-flows are listed.
+        if (flow.nodes.length > 0) {
+          entry.shape = flow.nodes.map((n) => n.kind);
         }
       }
       entries.push(entry);
@@ -112,6 +119,19 @@ export class DiagramWriter {
       }
       searchDiagrams[d.id] = { title: d.title, kind: d.kind, level: d.level };
       collectSearchEntries(d, searchEntries);
+    }
+
+    // Second pass: assign `flowOrder` to each sub-flow entry by looking up the
+    // parent flow's step whose subDiagramId points here. Sidebar uses this to
+    // sort sub-flows by parent-step order instead of alphabetically (009 #5).
+    const entryById = new Map(entries.map((e) => [e.id, e]));
+    for (const d of this.diagrams.values()) {
+      if (d.kind !== 'flow') continue;
+      for (const s of (d as FlowDiagram).steps) {
+        if (!s.subDiagramId) continue;
+        const child = entryById.get(s.subDiagramId);
+        if (child) child.flowOrder = s.order;
+      }
     }
     const search: SearchIndexFile = { diagrams: searchDiagrams, entries: searchEntries };
 

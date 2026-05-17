@@ -54,18 +54,18 @@ From the gimli run:
 
 **Gap:** the sidebar groups flows by `trigger` (`http` / `cli` / `event`) and then lists them alphabetically *mixed with their own sub-flows*. Result: in the `cli` group on the gimli run, "Daily trade pipeline run" is immediately followed by its sub-flow "dispatches trade-pipeline run-once subcommand (sub-flow)" — but *also* by unrelated top-level flow "Earnings transcript ingest + summary" because both have `trigger: cli`. The hierarchy is there but the visual treatment hides it.
 
-- [ ] Within each trigger group, only render *top-level* flows at depth 0; their sub-flows nest beneath via the existing `TreeNode` recursion (already wired in `Sidebar.tsx:179-189`).
-- [ ] Sort top-level flows by name; sort sub-flows by `order` (which the orchestrator can persist as a meta field) rather than alphabetical.
-- [ ] Differentiate the leading-glyph: `▸`/`▾` for nodes with children, **nothing** (not a `·`) for leaves. The current `tree-chevron-empty: '·'` (`Sidebar.tsx:173`) reads as a bullet and makes hierarchy ambiguous.
-- [ ] Consider dropping trigger groups entirely on the sidebar in favour of pure parent-hierarchy grouping with a small trigger-icon chip next to each top-level flow.
+- [x] Confirmed: only level-1 flows enter `index.flows` (writer.ts), so trigger groups don't accidentally surface sub-flows as siblings. Sub-flows still appear via `TreeNode` recursion under their parent. The new sort makes the hierarchy unambiguous.
+- [x] Top-level flows within each trigger group sort by `title` (deterministic across runs). Sub-flows sort by `flowOrder` — a new optional field on `DiagramIndexEntry`, populated in a second writer pass that walks each top-level flow's `steps[].subDiagramId` and stashes the parent step's `order` on the child entry.
+- [x] `tree-chevron-empty` no longer renders the `·` bullet — it's an empty placeholder with reserved width. Leaves and parents are now visually distinct (chevron vs. blank).
+- [ ] (Deferred — out of scope for v0.3-flows.) Dropping trigger groups in favour of pure parent-hierarchy grouping with a trigger-icon chip per flow. Current grouping still works fine on the gimli reference run; revisit if the multi-trigger discoverability problem comes back.
 
 ## 6. Flow-shape glyph on each sidebar entry
 
 **Gap:** L1 has 18 flow entries in the gimli run; clicking through each to see the shape is the only way to discover content. A 5–7 px sparkline-style indicator per entry (one colored dot per step, colored by component kind) would let users scan "this is a Trade-Pipeline monoflow, this one crosses 4 components" without navigating.
 
-- [ ] Compute the per-flow step→component colour sequence at index-write time (`src/model/writer.ts`). Stash on the flow index entry, e.g. `shape: ['cli','job','service','external','service','service','library']`.
-- [ ] Sidebar `TreeNode` renders a thin row of 5px squares using `styleForKind(...).accent`. Truncate to first 7 with a `…` if longer.
-- [ ] Tooltip on hover lists the step count and unique-component count.
+- [x] `DiagramIndexEntry.shape?: ComponentKind[]` is populated by the writer for every flow entry (top-level *and* sub-flow) from `flow.nodes.map(n => n.kind)`. Lives on the index, so the sidebar renders without per-diagram fetches.
+- [x] `TreeNode` renders a `ShapeGlyph` component — a thin row of 5px squares coloured by `styleForKind(kind).accent`, with right-aligned `margin-left: auto` so it tucks to the end of the row. Truncated to the first 7 with an `…` marker; full sequence is kept on the entry for the tooltip math.
+- [x] Tooltip on hover (`title=` attribute) reads `"N steps · M unique components"` — the two numbers that answer the "monoflow vs. crosses multiple components" question at a glance.
 
 ## 7. WebSocket spam in serve mode
 
@@ -149,12 +149,14 @@ Same convention as `007_Post_Launch_TODO.md`:
 2. Tick the boxes in this file in the same PR.
 3. Bump `SCHEMA_VERSION` whenever the AI prompt or `FlowsSchema` changes (items 8, 9, A).
 
-**Recommended v0.3-flows milestone**, in order:
+**v0.3-flows milestone — shipped:**
 
-1. **#1** (swim lanes + vertical) — single highest-leverage change; turns every flow into a who-does-what diagram.
-2. **#3** (step card redesign) — pairs with #1; without it the lanes are wasted on cramped cards.
-3. **#9** (descriptions) + **#8** (file linkage) — closes the "what does this step *mean*" gap. Both are schema/prompt changes that ride one `SCHEMA_VERSION` bump.
-4. **#4** (inline sub-flow expansion) — the single biggest navigation fix; users stop losing context.
-5. **#5 + #6** (sidebar grouping + shape glyphs) — cheap polish, finishes the discovery story.
+1. ✅ **#1** (swim lanes + vertical)
+2. ✅ **#3** (step card redesign)
+3. ✅ **#9** (descriptions) + ✅ **#8** (file linkage) — one `SCHEMA_VERSION` bump (3 → 4).
+4. ✅ **#4** (inline sub-flow expansion) — split-pane.
+5. ✅ **#5 + #6** (sidebar grouping + shape glyphs).
 
-Defer until v0.4: **#A** (branching schema), **#B** (story view), **#C** (cross-flow links), **#D** (animation).
+Still open in 009: #2 (trigger node), #7 (WebSocket spam), #10–#13 (L1 surfaces, breadcrumb, mini-map, regen-fires).
+
+Deferred to v0.4: **#A** (branching schema), **#B** (story view), **#C** (cross-flow links), **#D** (animation).

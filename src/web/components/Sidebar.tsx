@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import { useEffect, useMemo, useState } from 'react';
-import type { DiagramIndex, DiagramIndexEntry, FlowTrigger } from '../../model/types.js';
+import type { ComponentKind, DiagramIndex, DiagramIndexEntry, FlowTrigger } from '../../model/types.js';
+import { styleForKind } from '../theme';
 
 const STORAGE_KEY = 'viszi.sidebar.expanded.v1';
 
@@ -14,8 +15,15 @@ function buildChildrenMap(index: DiagramIndex): ChildrenMap {
     arr.push(d);
     map.set(d.parentId, arr);
   }
+  // Sort children: sub-flows by parent-step `flowOrder` (009 #5), other
+  // children (system sub-diagrams) by level then title.
   for (const arr of map.values()) {
-    arr.sort((a, b) => a.level - b.level || a.title.localeCompare(b.title));
+    arr.sort((a, b) => {
+      if (a.flowOrder !== undefined && b.flowOrder !== undefined) return a.flowOrder - b.flowOrder;
+      if (a.flowOrder !== undefined) return -1;
+      if (b.flowOrder !== undefined) return 1;
+      return a.level - b.level || a.title.localeCompare(b.title);
+    });
   }
   return map;
 }
@@ -54,6 +62,7 @@ export function Sidebar(props: { index: DiagramIndex }) {
   const { index } = props;
   const root = index.diagrams.find((d) => d.id === index.rootSystemId);
   const children = useMemo(() => buildChildrenMap(index), [index]);
+  const entryById = useMemo(() => new Map(index.diagrams.map((d) => [d.id, d])), [index]);
 
   const [expanded, setExpanded] = useState<Set<string>>(() => loadExpanded());
 
@@ -74,22 +83,30 @@ export function Sidebar(props: { index: DiagramIndex }) {
     const all = new Set<string>();
     if (root) for (const id of collectAllIds([root], children)) all.add(id);
     for (const id of collectAllIds(
-      index.flows.map((f) => index.diagrams.find((d) => d.id === f.id)).filter(Boolean) as DiagramIndexEntry[],
+      index.flows.map((f) => entryById.get(f.id)).filter(Boolean) as DiagramIndexEntry[],
       children,
     )) all.add(id);
     setExpanded(all);
   };
   const collapseAll = () => setExpanded(new Set());
 
+  // 009 #5: top-level flows are already level-1 only (writer.ts), so the
+  // trigger groups don't accidentally mix sub-flows in as siblings. Within
+  // each group sort alphabetically so order is predictable across runs.
   const flowsByTrigger = useMemo(() => {
-    const groups = new Map<FlowTrigger, { id: string; title: string; trigger: FlowTrigger }[]>();
+    const groups = new Map<FlowTrigger, DiagramIndexEntry[]>();
     for (const f of index.flows) {
+      const entry = entryById.get(f.id);
+      if (!entry) continue;
       const arr = groups.get(f.trigger) ?? [];
-      arr.push(f);
+      arr.push(entry);
       groups.set(f.trigger, arr);
     }
+    for (const arr of groups.values()) {
+      arr.sort((a, b) => a.title.localeCompare(b.title));
+    }
     return groups;
-  }, [index.flows]);
+  }, [index.flows, entryById]);
 
   return (
     <aside className="sidebar">
@@ -113,19 +130,15 @@ export function Sidebar(props: { index: DiagramIndex }) {
         return (
           <div key={trigger} className="flow-group">
             <div className="flow-group-label">{trigger}</div>
-            {flows.map((f) => {
-              const entry = index.diagrams.find((d) => d.id === f.id);
-              if (!entry) return null;
-              return (
-                <TreeNode
-                  key={entry.id}
-                  entry={entry}
-                  children_={children}
-                  expanded={expanded}
-                  toggle={toggle}
-                />
-              );
-            })}
+            {flows.map((entry) => (
+              <TreeNode
+                key={entry.id}
+                entry={entry}
+                children_={children}
+                expanded={expanded}
+                toggle={toggle}
+              />
+            ))}
           </div>
         );
       })}
@@ -170,11 +183,14 @@ function TreeNode({
             {isOpen ? '▾' : '▸'}
           </button>
         ) : (
-          <span className="tree-chevron tree-chevron-empty" aria-hidden="true">·</span>
+          // 009 #5: leaves get an empty placeholder — the previous '·' read as
+          // a bullet and made the tree hierarchy ambiguous.
+          <span className="tree-chevron tree-chevron-empty" aria-hidden="true" />
         )}
         <NavLink to={`/d/${encodeURIComponent(entry.id)}`} className="tree-link">
           {entry.title}
         </NavLink>
+        {entry.shape && entry.shape.length > 0 && <ShapeGlyph shape={entry.shape} />}
       </div>
       {isOpen &&
         kids.map((k) => (
@@ -188,5 +204,29 @@ function TreeNode({
           />
         ))}
     </>
+  );
+}
+
+const SHAPE_GLYPH_LIMIT = 7;
+
+/** 009 #6: thin row of 5px coloured squares previewing the flow's step→
+ * component-kind sequence. One square per step (truncated at 7 with a '…')
+ * coloured by `styleForKind(kind).accent`. */
+function ShapeGlyph({ shape }: { shape: ComponentKind[] }) {
+  const truncated = shape.length > SHAPE_GLYPH_LIMIT;
+  const visible = truncated ? shape.slice(0, SHAPE_GLYPH_LIMIT) : shape;
+  const uniqueCount = new Set(shape).size;
+  const tooltip = `${shape.length} step${shape.length === 1 ? '' : 's'} · ${uniqueCount} unique component${uniqueCount === 1 ? '' : 's'}`;
+  return (
+    <span className="shape-glyph" title={tooltip} aria-label={tooltip}>
+      {visible.map((k, i) => (
+        <span
+          key={i}
+          className="shape-glyph-dot"
+          style={{ background: styleForKind(k).accent }}
+        />
+      ))}
+      {truncated && <span className="shape-glyph-overflow" aria-hidden="true">…</span>}
+    </span>
   );
 }

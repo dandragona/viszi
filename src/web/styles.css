@@ -360,7 +360,9 @@ button.primary:hover {
 }
 .tree-chevron-empty {
   cursor: default;
-  opacity: 0.25;
+  /* 009 #5: render nothing (just reserve the space). Previously a '·' lived
+   * here and read as a bullet point, blurring the parent-vs-leaf distinction
+   * for users scanning the tree. */
 }
 .tree-link {
   flex: 1;
@@ -378,6 +380,33 @@ button.primary:hover {
   font-style: normal;
   color: var(--fg-3);
   letter-spacing: 0.5px;
+}
+
+/* 009 #6: per-flow shape glyph — a thin row of 5px squares previewing the
+ * step→component-kind sequence. Sits on the right of each flow's tree row. */
+.shape-glyph {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  padding-right: 8px;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+.tree-row:hover .shape-glyph {
+  opacity: 1;
+}
+.shape-glyph-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 1px;
+  display: inline-block;
+}
+.shape-glyph-overflow {
+  font-size: 9px;
+  color: var(--fg-3);
+  margin-left: 1px;
+  line-height: 1;
 }
 
 .canvas-wrap {

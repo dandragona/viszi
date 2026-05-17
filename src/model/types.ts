@@ -113,6 +113,19 @@ export interface DiagramIndexEntry {
    * sidebar can render without loading every individual diagram file.
    */
   monoComponent?: { componentLabel: string; share: number };
+  /**
+   * For sub-flows: the `order` of the parent step that drilled into this
+   * sub-flow. Lets the sidebar sort sub-flows by the order they appear in the
+   * parent flow's pipeline instead of alphabetically (009 #5).
+   */
+  flowOrder?: number;
+  /**
+   * Per-step component-kind sequence for flow diagrams. The sidebar renders
+   * this as a row of 5px coloured squares so users can scan the *shape* of a
+   * flow ("monoflow vs. crosses 4 components") without clicking through.
+   * Truncated by the renderer; the writer stashes the full sequence (009 #6).
+   */
+  shape?: ComponentKind[];
 }
 
 export interface DiagramIndex {

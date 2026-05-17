@@ -36,10 +36,10 @@ From the gimli run:
 
 **Gap:** today's `FlowStepNode` packs four things into one ~240px box: a number, a verb phrase, a component icon+label, and a "drill in →" microcopy. Visual hierarchy is weak; the component (most useful for orientation) is the smallest text on the card.
 
-- [ ] Promote the component to a left lane-chip with the kind icon + label — make it visually heavier than the action verb.
-- [ ] Make the whole card the drill target when `subDiagramId` is set. Today only the card body around the inline "drill in →" link drills; the link itself is redundant. Replace it with a single corner chevron + hover state ("↘ 4 sub-steps").
-- [ ] Drop the `×` hide button on flow steps (`FlowStepNode.tsx:44-54`). Hiding step 4 of a 7-step flow yields a meaningless 6-step flow; hide makes sense on system diagrams (filter views), not on linear narratives. Keep `×` on `ComponentNode` only.
-- [ ] Show step description (currently always blank — see item 9) on the card or in a tooltip.
+- [x] Component is now a left lane-chip (80px-wide, kind-coloured rail with the kind icon stacked above the label). Visually heavier than the action verb on the right.
+- [x] Whole card is the drill target — the inline "drill in →" microcopy is gone. Corner chevron remains as the drill affordance with a card-wide hover state. (Sub-step count in the chevron tooltip — "↘ 4 sub-steps" — deferred: requires the index writer to stash `stepCount` per flow index entry. Generic "Click to drill into sub-flow" tooltip used in the meantime.)
+- [x] `×` hide button removed from `FlowStepNode`. `onHide` is no longer passed in. Still present on `ComponentNode` (system diagrams).
+- [x] Description renders on the card in a faded `.flow-step-desc` block below the action verb. Will be populated once item #9 lands.
 
 ## 4. Inline sub-flow expansion instead of nav-away
 

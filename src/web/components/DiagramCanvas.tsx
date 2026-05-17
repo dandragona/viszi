@@ -17,24 +17,32 @@ import { layoutWithElk } from '../layout/elk';
 import { Icon } from './Icon';
 import { TRIGGER_ICON } from '../theme';
 import { FilesPanel, type FilesPanelData } from './FilesPanel';
+import { SubFlowPanel } from './SubFlowPanel';
+
+function parseHashParams(hash: string): URLSearchParams {
+  return new URLSearchParams(hash.length > 1 ? hash.slice(1) : '');
+}
 
 function parseHideHash(hash: string): Set<string> {
-  if (!hash || hash.length < 2) return new Set();
-  const params = new URLSearchParams(hash.slice(1));
-  const raw = params.get('hide');
+  const raw = parseHashParams(hash).get('hide');
   if (!raw) return new Set();
   return new Set(raw.split(',').map((s) => s.trim()).filter(Boolean));
 }
 
-function writeHideHash(currentHash: string, hidden: Set<string>): string {
-  const params = new URLSearchParams(currentHash.length > 1 ? currentHash.slice(1) : '');
-  if (hidden.size === 0) {
-    params.delete('hide');
-  } else {
-    params.set('hide', Array.from(hidden).join(','));
-  }
+function parseExpandHash(hash: string): string | undefined {
+  return parseHashParams(hash).get('expand') ?? undefined;
+}
+
+function writeHashParam(currentHash: string, key: string, value: string | undefined): string {
+  const params = parseHashParams(currentHash);
+  if (!value) params.delete(key);
+  else params.set(key, value);
   const out = params.toString();
   return out ? `#${out}` : '';
+}
+
+function writeHideHash(currentHash: string, hidden: Set<string>): string {
+  return writeHashParam(currentHash, 'hide', hidden.size === 0 ? undefined : Array.from(hidden).join(','));
 }
 
 const EDGE_STYLES: Record<EdgeKind, { stroke: string; strokeWidth: number; dasharray?: string }> = {
@@ -61,6 +69,7 @@ export function DiagramCanvas({ diagram }: { diagram: AnyDiagram }) {
   const [filesPanel, setFilesPanel] = useState<FilesPanelData | null>(null);
 
   const hidden = useMemo(() => parseHideHash(location.hash), [location.hash]);
+  const expandStepId = useMemo(() => parseExpandHash(location.hash), [location.hash]);
 
   const onDrill = useCallback(
     (id: string) => navigate(`/d/${encodeURIComponent(id)}`),
@@ -88,14 +97,38 @@ export function DiagramCanvas({ diagram }: { diagram: AnyDiagram }) {
     },
     [diagram],
   );
+
+  // Toggle inline sub-flow expansion via URL hash (009 #4). Clicking the same
+  // step twice closes the panel; clicking a different step swaps which sub-flow
+  // is shown without an intermediate empty state.
+  const onToggleExpand = useCallback(
+    (stepId: string) => {
+      const current = parseExpandHash(location.hash);
+      const next = current === stepId ? undefined : stepId;
+      navigate(`${location.pathname}${location.search}${writeHashParam(location.hash, 'expand', next)}`, { replace: true });
+    },
+    [location.hash, location.pathname, location.search, navigate],
+  );
+  const closeSubFlow = useCallback(() => {
+    navigate(`${location.pathname}${location.search}${writeHashParam(location.hash, 'expand', undefined)}`, { replace: true });
+  }, [location.hash, location.pathname, location.search, navigate]);
+
   // Reset the files panel whenever the diagram changes (route nav).
   useEffect(() => {
     setFilesPanel(null);
   }, [diagram.id]);
 
+  // The expanded step's sub-diagram id, if the URL hash refers to a real step.
+  const expandedStep = useMemo(() => {
+    if (!expandStepId || diagram.kind !== 'flow') return undefined;
+    const step = diagram.steps.find((s) => s.id === expandStepId);
+    if (!step?.subDiagramId) return undefined;
+    return { id: step.id, label: step.action, subDiagramId: step.subDiagramId };
+  }, [expandStepId, diagram]);
+
   const { initialNodes, edges, prepositioned } = useMemo(
-    () => buildFlowElements(diagram, onDrill, onHide, onShowFiles, hidden),
-    [diagram, onDrill, onHide, onShowFiles, hidden],
+    () => buildFlowElements(diagram, onDrill, onHide, onShowFiles, onToggleExpand, expandStepId, hidden),
+    [diagram, onDrill, onHide, onShowFiles, onToggleExpand, expandStepId, hidden],
   );
 
   useEffect(() => {
@@ -132,6 +165,15 @@ export function DiagramCanvas({ diagram }: { diagram: AnyDiagram }) {
         </div>
       )}
       {filesPanel && <FilesPanel data={filesPanel} onClose={() => setFilesPanel(null)} />}
+      {expandedStep && (
+        <SubFlowPanel
+          key={expandedStep.id}
+          parentStepId={expandedStep.id}
+          parentStepLabel={expandedStep.label}
+          subDiagramId={expandedStep.subDiagramId}
+          onClose={closeSubFlow}
+        />
+      )}
       {!layouted ? (
         <div className="loading"><span className="spinner" /> Laying out…</div>
       ) : (
@@ -226,6 +268,8 @@ function buildFlowElements(
   onDrill: (id: string) => void,
   onHide: (id: string) => void,
   onShowFiles: (id: string) => void,
+  onToggleExpand: (stepId: string, subDiagramId: string) => void,
+  expandStepId: string | undefined,
   hidden: Set<string>,
 ): {
   initialNodes: Node<NodeData>[];
@@ -313,6 +357,7 @@ function buildFlowElements(
   const stepNodes: Node<NodeData>[] = orderedSteps.map((n, idx) => {
     const cid = (n.meta?.componentId as string | undefined) ?? '__nocomp__';
     const laneX = (laneIndexFor.get(cid) ?? 0) * laneStride;
+    const subDiagramId = n.subDiagramId ?? findSubFlowForStep(diagram, n.id);
     return {
       id: n.id,
       type: 'flowStep',
@@ -323,8 +368,10 @@ function buildFlowElements(
         description: n.description,
         componentLabel: n.meta?.componentLabel as string | undefined,
         files: n.files.length > 0 ? n.files : undefined,
-        subDiagramId: n.subDiagramId ?? findSubFlowForStep(diagram, n.id),
+        subDiagramId,
+        expanded: expandStepId === n.id && !!subDiagramId,
         onDrill,
+        onToggleExpand,
         onShowFiles,
       } satisfies FlowStepNodeData,
       position: { x: laneX, y: headerOffsetY + idx * (STEP_HEIGHT + STEP_GAP_Y) },

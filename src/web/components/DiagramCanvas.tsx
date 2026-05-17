@@ -325,7 +325,6 @@ function buildFlowElements(
         componentLabel: n.meta?.componentLabel as string | undefined,
         subDiagramId: n.subDiagramId ?? findSubFlowForStep(diagram, n.id),
         onDrill,
-        onHide,
       } satisfies FlowStepNodeData,
       position: { x: laneX, y: headerOffsetY + idx * (STEP_HEIGHT + STEP_GAP_Y) },
     };

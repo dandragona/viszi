@@ -82,7 +82,6 @@ export function DiagramCanvas({ diagram }: { diagram: AnyDiagram }) {
 
   const onShowFiles = useCallback(
     (id: string) => {
-      if (diagram.kind !== 'system') return;
       const node = diagram.nodes.find((n) => n.id === id);
       if (!node) return;
       setFilesPanel({ label: node.label, files: node.files });
@@ -323,8 +322,10 @@ function buildFlowElements(
         kind: n.kind,
         description: n.description,
         componentLabel: n.meta?.componentLabel as string | undefined,
+        files: n.files.length > 0 ? n.files : undefined,
         subDiagramId: n.subDiagramId ?? findSubFlowForStep(diagram, n.id),
         onDrill,
+        onShowFiles,
       } satisfies FlowStepNodeData,
       position: { x: laneX, y: headerOffsetY + idx * (STEP_HEIGHT + STEP_GAP_Y) },
     };

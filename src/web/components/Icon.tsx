@@ -4,6 +4,7 @@ import {
   Clock,
   Cpu,
   Database,
+  FileText,
   Folder,
   Globe,
   HelpCircle,
@@ -37,6 +38,7 @@ const REGISTRY: Record<string, LucideIcon> = {
   power: Power,
   'arrow-up-right': ArrowUpRight,
   folder: Folder,
+  'file-text': FileText,
 };
 
 export function Icon({ name, size = 14, strokeWidth = 1.75 }: { name: string; size?: number; strokeWidth?: number }) {

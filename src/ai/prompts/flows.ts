@@ -125,20 +125,36 @@ ${
 
 ## Step-quality rules (these matter)
 
-Each step's \`action\` must be a **single, verb-led, observable behaviour** — not a re-statement of what the component does. The reader should be able to point to one place in the code that does this exact thing.
+Each step has three fields you must fill: \`action\`, \`description\`, and \`files\`.
 
-**GOOD** action labels:
+**\`action\`** — a **single, verb-led, observable behaviour** — not a re-statement of what the component does. The reader should be able to point to one place in the code that does this exact thing.
+
+GOOD action labels:
 - "validates request schema"
 - "writes audit log to db"
 - "publishes \`user.created\` event"
 - "fetches subscription from billing api"
 - "renders payment summary"
 
-**BAD** action labels (avoid these shapes):
+BAD action labels (avoid these shapes):
 - "Initialize X storage" — describes the component, not a step
 - "Run main pipeline stages" — vague + circular
 - "Handle the request" — not specific enough
 - "Process payment" as a single step inside the "Process payment" flow — restates the flow name
+
+**\`description\`** — one short sentence (≤ 280 chars) explaining **why** this step exists or what business/architectural constraint it enforces. The \`action\` says *what mechanically happens*; \`description\` says *what it's there for*. This is required for every step.
+
+GOOD descriptions:
+- "Schema validation runs before any DB write so malformed payloads can't corrupt downstream state."
+- "Audit log capture is mandated by SOC2 — every state-changing request must leave a row here."
+- "Cache lookup short-circuits the expensive provider call when a recent quote exists."
+
+BAD descriptions:
+- "Validates the request" — restates the action
+- "Important step" — empty calorie
+- "This component handles validation" — describes the component
+
+**\`files\`** — cite **1–2 source file paths** (at most 5) from the step's \`componentId\` member list that implement this exact step. Use the paths as they appear in the component's \`members\` array — no fuzzy matches, no invented paths. Empty list is OK only when the step is truly cross-cutting (e.g. "downstream service publishes back" where the implementer lives outside this scope).
 
 **Step composition rules:**
 - Do NOT pad step count. If a flow has 4 real steps, output 4 — not 8.

@@ -68,8 +68,19 @@ describe('schemas', () => {
           description: 'Authenticate a user with email + password.',
           trigger: 'http',
           steps: [
-            { order: 1, componentId: 'api', action: 'POST /login' },
-            { order: 2, componentId: 'db', action: 'SELECT user' },
+            {
+              order: 1,
+              componentId: 'api',
+              action: 'POST /login',
+              description: 'Entry point — validates credentials before any DB read.',
+              files: ['src/api/login.ts'],
+            },
+            {
+              order: 2,
+              componentId: 'db',
+              action: 'SELECT user',
+              description: 'Lookup the user row to compare password hash.',
+            },
           ],
         },
       ],
@@ -87,19 +98,84 @@ describe('schemas', () => {
           name: 'Single step',
           description: 'Too short.',
           trigger: 'cli',
-          steps: [{ order: 1, componentId: 'api', action: 'only one' }],
+          steps: [
+            {
+              order: 1,
+              componentId: 'api',
+              action: 'only one',
+              description: 'But the schema still requires at least 2.',
+            },
+          ],
         },
       ],
     };
     expect(validateFlows(bad)).toBe(false);
   });
 
+  it('FlowsSchema caps step.files at 5', () => {
+    const tooManyFiles = {
+      flows: [
+        {
+          id: 'over',
+          name: 'Cited too many files',
+          description: 'Six is one too many.',
+          trigger: 'cli',
+          steps: [
+            {
+              order: 1,
+              componentId: 'a',
+              action: 'do thing',
+              description: 'Step 1.',
+              files: ['1.ts', '2.ts', '3.ts', '4.ts', '5.ts', '6.ts'],
+            },
+            {
+              order: 2,
+              componentId: 'a',
+              action: 'do another thing',
+              description: 'Step 2.',
+            },
+          ],
+        },
+      ],
+    };
+    expect(validateFlows(tooManyFiles)).toBe(false);
+  });
+
+  it('FlowsSchema rejects steps missing required description', () => {
+    const noDescription = {
+      flows: [
+        {
+          id: 'undescribed',
+          name: 'No description',
+          description: 'Top-level desc exists; step desc does not.',
+          trigger: 'cli',
+          steps: [
+            { order: 1, componentId: 'a', action: 'a thing' },
+            { order: 2, componentId: 'b', action: 'another thing' },
+          ],
+        },
+      ],
+    };
+    expect(validateFlows(noDescription)).toBe(false);
+  });
+
   it('SubFlowSchema mirrors FlowsSchema.steps', () => {
     expect(
       validateSubFlow({
         steps: [
-          { order: 1, componentId: 'a', action: 'do A' },
-          { order: 2, componentId: 'b', action: 'do B' },
+          {
+            order: 1,
+            componentId: 'a',
+            action: 'do A',
+            description: 'Component A does its half.',
+            files: ['src/a.ts'],
+          },
+          {
+            order: 2,
+            componentId: 'b',
+            action: 'do B',
+            description: 'Then B does the other half.',
+          },
         ],
       }),
     ).toBe(true);

@@ -90,13 +90,18 @@ export const FlowsSchema = {
             maxItems: 12,
             items: {
               type: 'object',
-              required: ['order', 'componentId', 'action'],
+              required: ['order', 'componentId', 'action', 'description'],
               additionalProperties: false,
               properties: {
                 order: { type: 'integer', minimum: 1 },
                 componentId: { type: 'string' },
                 action: { type: 'string', minLength: 1, maxLength: 80 },
-                description: { type: 'string', maxLength: 280 },
+                description: { type: 'string', minLength: 1, maxLength: 280 },
+                files: {
+                  type: 'array',
+                  maxItems: 5,
+                  items: { type: 'string' },
+                },
               },
             },
           },
@@ -117,17 +122,22 @@ export const SubFlowSchema = {
       maxItems: 20,
       items: {
         type: 'object',
-        required: ['order', 'componentId', 'action'],
+        required: ['order', 'componentId', 'action', 'description'],
         additionalProperties: false,
         properties: {
           order: { type: 'integer', minimum: 1 },
           componentId: { type: 'string' },
           action: { type: 'string', minLength: 1, maxLength: 80 },
-          description: { type: 'string', maxLength: 280 },
+          description: { type: 'string', minLength: 1, maxLength: 280 },
+          files: {
+            type: 'array',
+            maxItems: 5,
+            items: { type: 'string' },
+          },
         },
       },
     },
   },
 } as const;
 
-export const SCHEMA_VERSION = '3';
+export const SCHEMA_VERSION = '4';

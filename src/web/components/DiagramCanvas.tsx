@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import ReactFlow, {
   Background,
@@ -61,6 +61,16 @@ const NODE_TYPES = {
 };
 
 type NodeData = ComponentNodeData | FlowStepNodeData | LaneHeaderNodeData;
+
+// Manual swim-lane layout constants (009 #1). Shared between the initial
+// build and the post-paint re-measurement so the row-index math agrees.
+const FLOW_STEP_HEIGHT_ASSUMED = 120;
+const FLOW_STEP_GAP_Y = 50;
+
+function cssEscape(s: string): string {
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return CSS.escape(s);
+  return s.replace(/[^a-zA-Z0-9_-]/g, (c) => `\\${c}`);
+}
 
 export function DiagramCanvas({ diagram }: { diagram: AnyDiagram }) {
   const navigate = useNavigate();
@@ -131,8 +141,13 @@ export function DiagramCanvas({ diagram }: { diagram: AnyDiagram }) {
     [diagram, onDrill, onHide, onShowFiles, onToggleExpand, expandStepId, hidden],
   );
 
+  // Tracks the input-node-set we've already re-measured against, so the
+  // measurement effect below doesn't loop after it writes new positions.
+  const measuredForRef = useRef<Node<NodeData>[] | null>(null);
+
   useEffect(() => {
     let cancelled = false;
+    measuredForRef.current = null;
     if (prepositioned) {
       // Flow diagrams use manual swim-lane positioning (item 009 #1). ELK's
       // layered algorithm groups partitions into the same layer, not adjacent
@@ -153,6 +168,53 @@ export function DiagramCanvas({ diagram }: { diagram: AnyDiagram }) {
       cancelled = true;
     };
   }, [initialNodes, edges, prepositioned, diagram.kind]);
+
+  // After the manual swim-lane layout paints, measure actual step-card heights
+  // and re-position rows if any card exceeds the assumed STEP_HEIGHT. The
+  // original layout uses a 170px stride, but cards with longer descriptions
+  // render at ~190px, causing visible overlap on single-lane flows.
+  useEffect(() => {
+    if (!prepositioned || !layouted) return;
+    if (measuredForRef.current === initialNodes) return;
+    let cancelled = false;
+    const raf = requestAnimationFrame(() => {
+      if (cancelled) return;
+      const vp = document.querySelector('.react-flow__viewport') as HTMLElement | null;
+      const scaleMatch = vp?.style.transform.match(/scale\(([\d.]+)\)/);
+      const scale = scaleMatch ? Number(scaleMatch[1]) : 1;
+      let maxStepH = 0;
+      const heights = new Map<string, number>();
+      for (const n of layouted) {
+        if (n.type !== 'flowStep') continue;
+        const el = document.querySelector<HTMLElement>(`.react-flow__node[data-id="${cssEscape(n.id)}"]`);
+        if (!el) continue;
+        const h = el.getBoundingClientRect().height / scale;
+        heights.set(n.id, h);
+        if (h > maxStepH) maxStepH = h;
+      }
+      if (maxStepH === 0) return;
+      measuredForRef.current = initialNodes;
+      const oldStride = FLOW_STEP_HEIGHT_ASSUMED + FLOW_STEP_GAP_Y;
+      const newStride = Math.max(Math.ceil(maxStepH) + FLOW_STEP_GAP_Y, oldStride);
+      if (newStride === oldStride) return;
+      // Determine baseline y (header offset = smallest flowStep y).
+      let baseY = Infinity;
+      for (const n of layouted) {
+        if (n.type === 'flowStep' && n.position.y < baseY) baseY = n.position.y;
+      }
+      if (!isFinite(baseY)) return;
+      const repositioned = layouted.map((n) => {
+        if (n.type !== 'flowStep') return n;
+        const row = Math.round((n.position.y - baseY) / oldStride);
+        return { ...n, position: { x: n.position.x, y: baseY + row * newStride } };
+      });
+      setLayouted(repositioned);
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+    };
+  }, [layouted, prepositioned, initialNodes]);
 
   return (
     <div className="canvas-wrap">
@@ -326,8 +388,8 @@ function buildFlowElements(
   // DiagramMeta covers that case already).
   const LANE_WIDTH = 260;
   const LANE_GUTTER = 60;
-  const STEP_GAP_Y = 50;
-  const STEP_HEIGHT = 120;
+  const STEP_GAP_Y = FLOW_STEP_GAP_Y;
+  const STEP_HEIGHT = FLOW_STEP_HEIGHT_ASSUMED;
   const HEADER_GAP = 28;
   const HEADER_HEIGHT = 40;
 

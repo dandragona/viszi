@@ -217,3 +217,20 @@ The doubling of AI cost is the obvious downside, which is why this is opt-in. Th
 - We do **not** also implement gitdiagram's validate-and-retry loop here; that's a separate decision (open in `009_Flow_UX_Improvements.md` follow-ups). The two-stage pattern alone is the smaller, more reversible step.
 
 **Follow-ups** (not in scope of this ADR): measure stage-1 prose drift across runs (does the cache hit rate justify the separate cache, or should we collapse to one key?), and test whether stage 1 benefits from a smaller/cheaper model than stage 2 (`--model-explain` vs `--model`).
+
+---
+
+## ADR-016: Post-paint re-measurement for flow swim-lane layout (2026-05)
+
+**Decision**: After the manual swim-lane layout in `DiagramCanvas` paints, measure each rendered step card's height from the DOM and re-position the rows if the actual max height exceeds the assumed `STEP_HEIGHT = 120`. The new stride is `max(measuredMaxHeight + STEP_GAP_Y, oldStride)`; row indices are recovered from the original `y / oldStride` and re-multiplied. Guarded by a ref keyed to the current `initialNodes` array so the state update doesn't loop.
+
+**Context**: The swim-lane layout (ADR-009 #1) assigns each step `y = headerOffset + idx * (STEP_HEIGHT + STEP_GAP_Y)`. The constant `STEP_HEIGHT = 120` is a layout-space estimate, not a real measurement. Real step cards render at 174–206 px once descriptions, file chips, and lane labels are accounted for; on single-lane flows where every step sits on the same `laneX`, the stride of 170 was smaller than the card height, producing 4–36 px of visible overlap between successive cards. Multi-lane flows hide the bug because each card is in its own column.
+
+**Why**: A measurement-driven stride is more robust than bumping the constant. Future card-layout changes (extra chips, larger fonts, additional metadata) don't reintroduce overlap, and short cards still get tight spacing rather than padded gaps.
+
+**Consequences**:
+
+- One extra render pass for every flow diagram, only when measured heights exceed the estimate. The pass is scheduled via `requestAnimationFrame` after the initial `setLayouted`; the guard ref prevents re-entry.
+- The original `STEP_HEIGHT = 120` is now a floor, not a ceiling — if all cards happen to be ≤ 120 px, no re-layout fires (cf. dry-run stub flows).
+- Lane header positions are not re-measured; they sit at a fixed `y = 0` above their column and the row math uses the smallest flowStep `y` as the baseline.
+
